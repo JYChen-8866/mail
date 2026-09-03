@@ -1,0 +1,64 @@
+# Contributing to Flectar Mail
+
+Thank you for helping improve Flectar Mail. Keep changes focused, reviewable,
+and safe for a mail client that handles private user data.
+
+## Before starting
+
+- Search existing issues and pull requests before opening a duplicate.
+- Open an issue before substantial features, architecture changes, new
+  dependencies, protocol changes, or user-visible licensing changes.
+- Never submit real mailbox contents, credentials, OAuth tokens, signing
+  material, or personal fixture data. Use reserved `.example` domains.
+
+## Contributor License Agreement
+
+Every contributor must accept the
+[`Flectar Contributor License Agreement`](CLA.md) before a pull request can be
+merged. Contributors retain copyright. The CLA permits Flectar to maintain the
+AGPL project and provides an explicit patent grant; it does not make accepted
+client contributions proprietary. This purpose is also described in
+[`LICENSING.md`](LICENSING.md).
+
+If an employer or another organization owns your work, an authorized
+representative must approve the contribution. A personal checkbox cannot grant
+rights owned by your employer. Maintainers may request a separate corporate
+agreement before review is completed.
+
+## Pull requests
+
+- Keep one logical change per pull request.
+- Explain the problem, the chosen solution, tests, and user-visible effects.
+- Add or update tests for behavior changes.
+- Disclose material use of generative tools. You remain responsible for every
+  submitted line and for confirming that generated material has valid
+  provenance and compatible licensing.
+- Preserve third-party copyright and license notices.
+- Do not add dependencies or copied assets without documenting their source,
+  version, license, and required notices.
+
+## Local validation
+
+Run the checks relevant to your change:
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+slint-viewer --check ui/app.slint
+```
+
+UI changes must be rendered and inspected in light and dark themes. Responsive
+changes must also be checked at the documented phone and tablet preview sizes.
+Use fictional data in screenshots.
+
+Platform-specific changes should run the matching packaging or Gradle
+validation described in the
+[development guide](dev/DEVELOPMENT.md) and platform documentation.
+
+## Licensing of accepted contributions
+
+Accepted contributions are published as part of Flectar Mail under
+`AGPL-3.0-only`, unless a file is explicitly identified as third-party material
+under another compatible license. The CLA does not remove the AGPL rights that
+recipients receive for published releases.

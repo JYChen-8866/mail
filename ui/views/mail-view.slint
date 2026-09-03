@@ -1,0 +1,500 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { EmailLink, EmailRow, EmailTile, MailboxRow } from "../models.slint";
+import { MailSidebar } from "../components/sidebar.slint";
+import { MailListPane } from "mail-list-pane.slint";
+import { MailReadingPane } from "mail-reading-pane.slint";
+
+// Mail workspace composition. AppWindow owns the public state while this
+// component owns the feature layout, interaction wiring, and clipboard bridge.
+export component MailView inherits Rectangle {
+    in property <bool> compact: false;
+    in property <string> layout-mode: "default";
+    in property <bool> show-avatars: true;
+    in property <bool> loading: false;
+    in property <[EmailRow]> emails: [];
+    in property <[MailboxRow]> mailboxes: [];
+    in property <[MailboxRow]> account_mailboxes: [];
+    in property <[MailboxRow]> unified_mailboxes: [];
+    in property <[EmailTile]> email_tiles: [];
+    in property <[EmailLink]> email_links: [];
+    in property <string> active_view: "mail";
+    in property <string> selected_scope: "Unified Inbox";
+    in property <string> unified_count: "";
+    in property <string> total_count: "";
+    in property <string> search_query: "";
+    in property <string> search_filter: "All mail";
+    in property <string> list_status: "";
+    in property <string> selected_sender: "";
+    in property <string> selected_address: "";
+    in property <string> selected_subject: "";
+    in property <string> selected_time: "";
+    in property <string> selected_to: "";
+    in property <string> selected_label: "";
+    in property <string> selected_initials: "?";
+    in property <image> selected_favicon;
+    in property <bool> selected_has_favicon: false;
+    in property <string> selected_plain_text: "";
+    in property <string> selected_source: "";
+    in property <string> selected_text: "";
+    in property <bool> has_selection: false;
+    in property <string> clipboard_request: "";
+    in property <int> clipboard_request_id: 0;
+    in property <bool> sync_in_progress: false;
+    in property <bool> can_load_more: false;
+    in property <bool> loading_more: false;
+    in property <int> list_content_revision: 0;
+    in property <bool> has_selected: true;
+    in property <bool> selected_starred: false;
+    in property <bool> selected_unread: false;
+    in property <bool> selected_is_draft: false;
+    in property <string> selected_sender_verification: "";
+    in property <bool> remote-images-blocked: false;
+    in property <bool> monochrome_sidebar_icons: false;
+    in property <bool> print_supported: true;
+    in-out property <bool> mail_sidebar_collapsed: false;
+    in-out property <bool> text_mode: false;
+    in-out property <bool> source_mode: false;
+    in-out property <bool> rendering_info_open: false;
+    in-out property <float> email-content-aspect: 900 / 520;
+    in-out property <length> email-scroll-y: 0px;
+    in-out property <bool> settings_open: false;
+    in-out property <string> settings_tab: "General";
+    in-out property <string> compact-page: "list";
+    in-out property <bool> folders-open: false;
+    private property <bool> single-pane: root.compact || root.layout-mode == "minimal";
+    out property <length> email-viewport-width: root.single-pane ? compact-reading-pane.email-viewport-width : desktop-reading-pane.email-viewport-width;
+    out property <length> email-viewport-height: root.single-pane ? compact-reading-pane.email-viewport-height : desktop-reading-pane.email-viewport-height;
+    in property <color> accent;
+    in property <color> accent-soft;
+    in property <color> avatar-bg;
+    in property <color> avatar-selected-bg;
+    in property <color> body-text;
+    in property <color> border;
+    in property <color> border-subtle;
+    in property <color> control-bg;
+    in property <color> faint-text;
+    in property <color> heading;
+    in property <color> muted-control-bg;
+    in property <color> muted-text;
+    in property <color> secondary-text;
+    in property <color> selected-row;
+    in property <color> sidebar-bg;
+    in property <color> surface;
+    in property <color> surface-raised;
+    in property <color> title-color;
+    callback select_email(int);
+    callback search_changed(string);
+    callback set_search_filter(string);
+    callback select_scope(string);
+    callback load_more();
+    callback sync_mail();
+    callback message_action(string);
+    callback message_action_for_email(int, string);
+    callback compose_message_action(string);
+    callback close_preview();
+    callback print_message();
+    callback open_message_in_browser();
+    callback open_compose();
+    callback open_email_link(string);
+    callback copy_email_status(string);
+    callback email-pointer-event(float, float, string, bool, bool, bool, bool);
+    callback email-scroll(float, float);
+    callback email-key-event(string, bool, bool, bool, bool, bool, bool);
+    callback select-email-text();
+    callback load-remote-images-for-message();
+
+    changed layout-mode => {
+        if (root.layout-mode == "minimal") {
+            root.compact-page = "list";
+            root.folders-open = false;
+        }
+    }
+
+        HorizontalBox {
+            visible: root.active_view == "mail" && !root.single-pane;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            padding-top: 0px;
+            padding-right: 0px;
+            padding-bottom: 0px;
+            padding-left: 0px;
+            spacing: 0px;
+
+            MailSidebar {
+                height: parent.height;
+                touch-mode: false;
+                mailboxes: root.mailboxes;
+                account-mailboxes: root.account_mailboxes;
+                unified-mailboxes: root.unified_mailboxes;
+                unified-count: root.unified_count;
+                selected-scope: root.selected_scope;
+                monochrome-icons: root.monochrome_sidebar_icons;
+                collapsed <=> root.mail_sidebar_collapsed;
+                background-color: root.sidebar-bg;
+                hover-background: root.muted-control-bg;
+                selection-background: root.accent-soft;
+                accent-color: root.accent;
+                title-color: root.title-color;
+                body-color: root.body-text;
+                muted-color: root.muted-text;
+                select-scope(scope) => { root.select_scope(scope); }
+                compose => { root.open_compose(); }
+                manage-accounts => {
+                    root.settings_tab = "Accounts";
+                    root.settings_open = true;
+                }
+            }
+
+            MailListPane {
+                show-avatars: root.show-avatars;
+                loading: root.loading;
+                emails: root.emails;
+                selected_scope: root.selected_scope;
+                total_count: root.total_count;
+                search_query: root.search_query;
+                search_filter: root.search_filter;
+                list_status: root.list_status;
+                sync_in_progress: root.sync_in_progress;
+                can_load_more: root.can_load_more;
+                loading_more: root.loading_more;
+                content_revision: root.list_content_revision;
+                mail_sidebar_collapsed <=> root.mail_sidebar_collapsed;
+                accent: root.accent;
+                accent-soft: root.accent-soft;
+                avatar-bg: root.avatar-bg;
+                avatar-selected-bg: root.avatar-selected-bg;
+                body-text: root.body-text;
+                border: root.border;
+                border-subtle: root.border-subtle;
+                control-bg: root.control-bg;
+                faint-text: root.faint-text;
+                heading: root.heading;
+                muted-control-bg: root.muted-control-bg;
+                muted-text: root.muted-text;
+                secondary-text: root.secondary-text;
+                selected-row: root.selected-row;
+                surface: root.surface;
+                title-color: root.title-color;
+                select_email(id) => { root.select_email(id); }
+                search_changed(query) => { root.search_changed(query); }
+                set_search_filter(filter) => { root.set_search_filter(filter); }
+                load_more => { root.load_more(); }
+                sync_mail => { root.sync_mail(); }
+                message_action_for_email(id, action) => {
+                    root.message_action_for_email(id, action);
+                }
+            }
+
+            Rectangle { width: 1px; background: root.border; }
+
+            desktop-reading-pane := MailReadingPane {
+                show-avatars: root.show-avatars;
+                // This is the flexible column. Explicit constraints prevent
+                // the subject's wrapping width from becoming a hard maximum,
+                // so every pixel reclaimed from a collapsing sidebar belongs
+                // to the message surface instead of the window background.
+                min-width: 0px;
+                preferred-width: 0px;
+                max-width: root.width;
+                horizontal-stretch: 1;
+                print_supported: root.print_supported;
+                window-width: root.width;
+                email_tiles: root.email_tiles;
+                email_links: root.email_links;
+                selected_sender: root.selected_sender;
+                selected_address: root.selected_address;
+                selected_subject: root.selected_subject;
+                selected_time: root.selected_time;
+                selected_to: root.selected_to;
+                selected_label: root.selected_label;
+                selected_initials: root.selected_initials;
+                selected_favicon: root.selected_favicon;
+                selected_has_favicon: root.selected_has_favicon;
+                selected_plain_text: root.selected_plain_text;
+                selected_source: root.selected_source;
+                selected_text: root.selected_text;
+                has_selection: root.has_selection;
+                clipboard_request: root.clipboard_request;
+                clipboard_request_id: root.clipboard_request_id;
+                has_selected: root.has_selected;
+                selected_starred: root.selected_starred;
+                selected_unread: root.selected_unread;
+                selected_is_draft: root.selected_is_draft;
+                selected_sender_verification: root.selected_sender_verification;
+                remote-images-blocked: root.remote-images-blocked;
+                text_mode <=> root.text_mode;
+                source_mode <=> root.source_mode;
+                rendering_info_open <=> root.rendering_info_open;
+                email-content-aspect <=> root.email-content-aspect;
+                email-scroll-y <=> root.email-scroll-y;
+                accent: root.accent;
+                accent-soft: root.accent-soft;
+                border: root.border;
+                border-subtle: root.border-subtle;
+                control-bg: root.control-bg;
+                heading: root.heading;
+                muted-control-bg: root.muted-control-bg;
+                muted-text: root.muted-text;
+                secondary-text: root.secondary-text;
+                surface: root.surface;
+                surface-raised: root.surface-raised;
+                title-color: root.title-color;
+                message_action(action) => { root.message_action(action); }
+                compose_message_action(action) => { root.compose_message_action(action); }
+                close_preview => { root.close_preview(); }
+                print_message => { root.print_message(); }
+                open_message_in_browser => { root.open_message_in_browser(); }
+                open_email_link(url) => { root.open_email_link(url); }
+                copy_email_status(status) => { root.copy_email_status(status); }
+                load-remote-images-for-message => { root.load-remote-images-for-message(); }
+                email-pointer-event(x, y, kind, control, shift, alt, meta) => {
+                    root.email-pointer-event(x, y, kind, control, shift, alt, meta);
+                }
+                email-scroll(offset, viewport-height) => {
+                    root.email-scroll(offset, viewport-height);
+                }
+                email-key-event(text, pressed, repeat, control, shift, alt, meta) => {
+                    root.email-key-event(text, pressed, repeat, control, shift, alt, meta);
+                }
+                select-email-text => { root.select-email-text(); }
+            }
+        }
+
+        // Compact screens and the desktop Minimal preference share one
+        // navigation stack: folder drawer, message list, then message detail.
+        Rectangle {
+            visible: root.active_view == "mail" && root.single-pane;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: root.surface;
+            clip: true;
+
+            // Minimal changes the mail content presentation, not desktop
+            // navigation. The Default collapsible sidebar remains, with the
+            // list/reader stack consuming its animated remainder.
+            minimal-sidebar := MailSidebar {
+                visible: !root.compact;
+                x: 0px;
+                y: 0px;
+                height: parent.height;
+                touch-mode: false;
+                mailboxes: root.mailboxes;
+                account-mailboxes: root.account_mailboxes;
+                unified-mailboxes: root.unified_mailboxes;
+                unified-count: root.unified_count;
+                selected-scope: root.selected_scope;
+                monochrome-icons: root.monochrome_sidebar_icons;
+                collapsed <=> root.mail_sidebar_collapsed;
+                background-color: root.sidebar-bg;
+                hover-background: root.muted-control-bg;
+                selection-background: root.accent-soft;
+                accent-color: root.accent;
+                title-color: root.title-color;
+                body-color: root.body-text;
+                muted-color: root.muted-text;
+                select-scope(scope) => {
+                    root.select_scope(scope);
+                    root.compact-page = "list";
+                }
+                compose => { root.open_compose(); }
+                manage-accounts => {
+                    root.settings_tab = "Accounts";
+                    root.settings_open = true;
+                }
+            }
+
+            Rectangle {
+                visible: !root.compact;
+                x: minimal-sidebar.current-width;
+                y: 0px;
+                width: 1px;
+                height: parent.height;
+                background: root.border;
+            }
+
+            compact-list-pane := MailListPane {
+                loading: root.loading;
+                visible: root.compact-page == "list";
+                x: root.compact ? 0px : minimal-sidebar.current-width + 1px;
+                y: 0px;
+                width: max(0px, parent.width - self.x);
+                height: parent.height;
+                compact: root.compact;
+                single-pane-navigation: root.compact;
+                show-avatars: root.show-avatars;
+                dense: !root.compact;
+                emails: root.emails;
+                selected_scope: root.selected_scope;
+                total_count: root.total_count;
+                search_query: root.search_query;
+                search_filter: root.search_filter;
+                list_status: root.list_status;
+                sync_in_progress: root.sync_in_progress;
+                can_load_more: root.can_load_more;
+                loading_more: root.loading_more;
+                content_revision: root.list_content_revision;
+                mail_sidebar_collapsed <=> root.mail_sidebar_collapsed;
+                accent: root.accent;
+                accent-soft: root.accent-soft;
+                avatar-bg: root.avatar-bg;
+                avatar-selected-bg: root.avatar-selected-bg;
+                body-text: root.body-text;
+                border: root.border;
+                border-subtle: root.border-subtle;
+                control-bg: root.control-bg;
+                faint-text: root.faint-text;
+                heading: root.heading;
+                muted-control-bg: root.muted-control-bg;
+                muted-text: root.muted-text;
+                secondary-text: root.secondary-text;
+                selected-row: root.selected-row;
+                surface: root.surface;
+                title-color: root.title-color;
+                select_email(id) => {
+                    root.select_email(id);
+                    root.compact-page = "message";
+                    root.folders-open = false;
+                }
+                search_changed(query) => { root.search_changed(query); }
+                set_search_filter(filter) => { root.set_search_filter(filter); }
+                load_more => { root.load_more(); }
+                sync_mail => { root.sync_mail(); }
+                open_folders => { root.folders-open = true; }
+                open_compose => { root.open_compose(); }
+                message_action_for_email(id, action) => {
+                    root.message_action_for_email(id, action);
+                }
+            }
+
+            compact-reading-pane := MailReadingPane {
+                print_supported: root.print_supported;
+                full-width: true;
+                show-avatars: root.show-avatars;
+                visible: root.compact-page == "message";
+                x: root.compact ? 0px : minimal-sidebar.current-width + 1px;
+                y: 0px;
+                width: max(0px, parent.width - self.x);
+                height: parent.height;
+                compact: root.compact;
+                window-width: self.width;
+                email_tiles: root.email_tiles;
+                email_links: root.email_links;
+                selected_sender: root.selected_sender;
+                selected_address: root.selected_address;
+                selected_subject: root.selected_subject;
+                selected_time: root.selected_time;
+                selected_to: root.selected_to;
+                selected_label: root.selected_label;
+                selected_initials: root.selected_initials;
+                selected_favicon: root.selected_favicon;
+                selected_has_favicon: root.selected_has_favicon;
+                selected_plain_text: root.selected_plain_text;
+                selected_source: root.selected_source;
+                selected_text: root.selected_text;
+                has_selection: root.has_selection;
+                clipboard_request: root.clipboard_request;
+                clipboard_request_id: root.clipboard_request_id;
+                has_selected: root.has_selected;
+                selected_starred: root.selected_starred;
+                selected_unread: root.selected_unread;
+                selected_is_draft: root.selected_is_draft;
+                selected_sender_verification: root.selected_sender_verification;
+                remote-images-blocked: root.remote-images-blocked;
+                text_mode <=> root.text_mode;
+                source_mode <=> root.source_mode;
+                rendering_info_open <=> root.rendering_info_open;
+                email-content-aspect <=> root.email-content-aspect;
+                email-scroll-y <=> root.email-scroll-y;
+                accent: root.accent;
+                accent-soft: root.accent-soft;
+                border: root.border;
+                border-subtle: root.border-subtle;
+                control-bg: root.control-bg;
+                heading: root.heading;
+                muted-control-bg: root.muted-control-bg;
+                muted-text: root.muted-text;
+                secondary-text: root.secondary-text;
+                surface: root.surface;
+                surface-raised: root.surface-raised;
+                title-color: root.title-color;
+                message_action(action) => { root.message_action(action); }
+                compose_message_action(action) => { root.compose_message_action(action); }
+                close_preview => {
+                    root.compact-page = "list";
+                    root.close_preview();
+                }
+                print_message => { root.print_message(); }
+                open_message_in_browser => { root.open_message_in_browser(); }
+                open_email_link(url) => { root.open_email_link(url); }
+                copy_email_status(status) => { root.copy_email_status(status); }
+                load-remote-images-for-message => { root.load-remote-images-for-message(); }
+                email-pointer-event(x, y, kind, control, shift, alt, meta) => {
+                    root.email-pointer-event(x, y, kind, control, shift, alt, meta);
+                }
+                email-scroll(offset, viewport-height) => {
+                    root.email-scroll(offset, viewport-height);
+                }
+                email-key-event(text, pressed, repeat, control, shift, alt, meta) => {
+                    root.email-key-event(text, pressed, repeat, control, shift, alt, meta);
+                }
+                select-email-text => { root.select-email-text(); }
+            }
+
+            // Modal drawer and scrim intentionally sit above both compact pages.
+            Rectangle {
+                visible: root.compact && root.folders-open;
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                z: 100;
+                background: #00000055;
+                TouchArea {
+                    accessible-role: button;
+                    accessible-label: @tr("Close folders");
+                    clicked => { root.folders-open = false; }
+                }
+            }
+            MailSidebar {
+                visible: root.compact && root.folders-open;
+                x: 0px;
+                y: 0px;
+                width: min(300px, parent.width - 48px);
+                height: parent.height;
+                z: 101;
+                touch-mode: true;
+                mailboxes: root.mailboxes;
+                account-mailboxes: root.account_mailboxes;
+                unified-mailboxes: root.unified_mailboxes;
+                unified-count: root.unified_count;
+                selected-scope: root.selected_scope;
+                monochrome-icons: root.monochrome_sidebar_icons;
+                collapsed: false;
+                background-color: root.sidebar-bg;
+                hover-background: root.muted-control-bg;
+                selection-background: root.accent-soft;
+                accent-color: root.accent;
+                title-color: root.title-color;
+                body-color: root.body-text;
+                muted-color: root.muted-text;
+                select-scope(scope) => {
+                    root.select_scope(scope);
+                    root.folders-open = false;
+                    root.compact-page = "list";
+                }
+                compose => {
+                    root.folders-open = false;
+                    root.open_compose();
+                }
+                manage-accounts => {
+                    root.folders-open = false;
+                    root.settings_tab = "Accounts";
+                    root.settings_open = true;
+                }
+            }
+        }
+}

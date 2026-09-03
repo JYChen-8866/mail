@@ -1,0 +1,193 @@
+// Shared UI-facing data types live outside app.slint so feature components can
+// consume the same models without depending on the application window.
+export struct LocalizedMessage {
+    key: string,
+    argument: string,
+    second_argument: string,
+    third_argument: string,
+}
+
+export struct MailboxRow {
+    label: string,
+    scope: string,
+    context: string,
+    detail: string,
+    avatar: string,
+    avatar_image: image,
+    has_avatar: bool,
+    is_account: bool,
+    count: string,
+}
+
+export struct EmailRow {
+    id: int,
+    account: string,
+    folder: string,
+    sender: string,
+    address: string,
+    initials: string,
+    favicon: image,
+    favicon_small: image,
+    has_favicon: bool,
+    subject: string,
+    preview: string,
+    time: string,
+    unread: bool,
+    starred: bool,
+    has_attachments: bool,
+    selected: bool,
+}
+
+export struct AccountRow {
+    id: int,
+    drag_key: string,
+    name: string,
+    email: string,
+    provider: string,
+    mail_protocol: string,
+    status: string,
+    sync_error: string,
+    initials: string,
+    avatar: image,
+    avatar_small: image,
+    has_avatar: bool,
+    username: string,
+    jmap_url: string,
+    imap_host: string,
+    imap_port: string,
+    smtp_host: string,
+    smtp_port: string,
+    mail_history: string,
+    calendar_connected: bool,
+    calendar_enabled: bool,
+    calendar_status: string,
+}
+
+export struct EmailLink {
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    url: string,
+}
+
+// Email HTML is rasterized into bounded vertical tiles. Coordinates are
+// normalized against the reading-pane width so HiDPI scaling stays in Slint
+// and no single full-message bitmap has to move on every scroll frame.
+export struct EmailTile {
+    image: image,
+    y: float,
+    height: float,
+}
+
+// The composer uses the same bounded-tile strategy as the message renderer,
+// but these coordinates are logical pixels because cosmic-text owns the
+// editor's exact wrapping and caret geometry.
+export struct ComposeEditorTile {
+    image: image,
+    y: float,
+    height: float,
+}
+
+export struct CalendarDay {
+    day: string,
+    iso_date: string,
+    outside_month: bool,
+    is_today: bool,
+    is_selected: bool,
+    has_events: bool,
+}
+
+export struct CalendarWeekDay {
+    weekday: string,
+    day: string,
+    iso_date: string,
+    is_today: bool,
+}
+
+export struct CalendarEventRow {
+    id: int,
+    editable: bool,
+    title: string,
+    detail: string,
+    iso_date: string,
+    day_index: int,
+    month_index: int,
+    start_minutes: int,
+    duration_minutes: int,
+    color_index: int,
+    all_day: bool,
+    provider: string,
+    account: string,
+    calendar: string,
+    location: string,
+    organizer: string,
+    description: string,
+    attendees: string,
+    join_url: string,
+    rsvp_status: string,
+    recurrence: string,
+    status: string,
+    source: string,
+}
+
+// Provider calendar collections are kept separate from events so the
+// calendar sidebar can mirror mail's account-aware navigation without
+// inventing local placeholder rows.
+export struct CalendarSourceRow {
+    id: int,
+    account_id: int,
+    group_start: bool,
+    name: string,
+    account_name: string,
+    email: string,
+    provider: string,
+    color: string,
+    color_index: int,
+    read_only: bool,
+    enabled: bool,
+    is_default: bool,
+    last_synced: string,
+}
+
+// Compose attachments intentionally expose display metadata only. Absolute
+// paths stay in Rust so the UI cannot accidentally render or persist local
+// filesystem details in a message.
+export struct ComposeAttachment {
+    name: string,
+    detail: string,
+}
+
+// A deliberately small contact shape for compose autocomplete. The core
+// keeps affinity/account scoping private and only exposes what the menu needs.
+export struct ComposeContact {
+    name: string,
+    email: string,
+    initials: string,
+}
+
+export struct ContactRow {
+    id: int,
+    name: string,
+    email: string,
+    initials: string,
+    avatar_tone: int,
+    company: string,
+    detail: string,
+    last_contacted: string,
+    favorite: bool,
+    selected: bool,
+}
+
+// Account-aware contact navigation is projected separately from ContactRow so
+// list rows stay small and the sidebar can update counts independently.
+export struct ContactAccountRow {
+    id: int,
+    name: string,
+    email: string,
+    initials: string,
+    avatar: image,
+    has_avatar: bool,
+    count: string,
+    selected: bool,
+}

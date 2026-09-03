@@ -1,0 +1,306 @@
+name: Native platform artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux packages (x64)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            appstream \
+            build-essential \
+            desktop-file-utils \
+            file \
+            libdbus-1-dev \
+            libfontconfig1-dev \
+            libx11-dev \
+            libx11-xcb-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxcursor-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev \
+            pkg-config \
+            python3 \
+            wget \
+            xinput \
+            xvfb
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: native-linux-x64
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: ./scripts/build-appimage.sh
+
+      - name: Build Debian package
+        env:
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: ./scripts/build-deb.sh
+
+      - name: Validate desktop metadata
+        run: |
+          desktop-file-validate resources/com.flectar.mail.desktop
+          # Network checks make private pre-publication repositories look like
+          # broken URLs. Flathub performs its own online validation on submit.
+          appstreamcli validate --no-net resources/com.flectar.mail.metainfo.xml
+
+      - name: Benchmark startup and idle resources
+        run: |
+          xvfb-run -a ./scripts/benchmark-startup.py \
+            --binary target/release/flectar-mail \
+            --profile-cache-dir resources/benchmarks/warm-cache \
+            --rounds 3 \
+            --idle-seconds 3
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flectar-mail-linux-x64
+          path: |
+            target/appimage/*.AppImage
+            target/deb/*.deb
+            target/startup-benchmark/*.json
+          if-no-files-found: error
+
+  windows:
+    name: Windows executable (x64)
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: native-windows-x64
+
+      - name: Build release executable
+        shell: bash
+        env:
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: cargo build --locked --release --no-default-features --features remote-content --bin flectar-mail
+
+      - name: Package executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force target/package/windows | Out-Null
+          New-Item -ItemType Directory -Force "target/package/windows/Licenses/Google Sans Flex" | Out-Null
+          Copy-Item target/release/flectar-mail.exe target/package/windows/
+          Copy-Item README.md target/package/windows/
+          Copy-Item LICENSE target/package/windows/
+          Copy-Item LICENSES target/package/windows/LICENSES -Recurse
+          Copy-Item THIRD_PARTY_NOTICES.md target/package/windows/
+          Copy-Item resources/fonts/google-sans-flex/OFL.txt "target/package/windows/Licenses/Google Sans Flex/"
+          Copy-Item resources/fonts/google-sans-flex/README.md "target/package/windows/Licenses/Google Sans Flex/"
+          Compress-Archive -Path target/package/windows/* -DestinationPath target/flectar-mail-windows-x64.zip -Force
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flectar-mail-windows-x64
+          path: target/flectar-mail-windows-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS application (Apple Silicon)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: native-macos-arm64
+
+      - name: Build release application
+        env:
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: cargo build --locked --release --no-default-features --features remote-content --bin flectar-mail
+
+      - name: Create ad-hoc signed app bundle
+        run: ./scripts/package-macos.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flectar-mail-macos-arm64
+          path: target/macos/flectar-mail-macos-arm64.zip
+          if-no-files-found: error
+
+  android:
+    name: Android test-signed APK (arm64)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: platform/android -> ../../target
+          key: native-android-arm64
+
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: Install Android packager
+        run: cargo install cargo-apk --locked --version 0.10.0
+
+      - name: Configure Android NDK compiler
+        run: |
+          toolchain="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$toolchain/aarch64-linux-android26-clang"
+          {
+            echo "CC_aarch64_linux_android=$toolchain/aarch64-linux-android26-clang"
+            echo "CXX_aarch64_linux_android=$toolchain/aarch64-linux-android26-clang++"
+            echo "AR_aarch64_linux_android=$toolchain/llvm-ar"
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$toolchain/aarch64-linux-android26-clang"
+          } >> "$GITHUB_ENV"
+
+      - name: Build test-signed release APK
+        env:
+          FLECTAR_GOOGLE_ANDROID_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_ANDROID_CLIENT_ID }}
+          FLECTAR_MICROSOFT_ANDROID_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_ANDROID_CLIENT_ID }}
+          FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI: ${{ secrets.FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI }}
+        run: ./scripts/build-android-test-apk.sh
+
+      - name: Verify release APK manifest, ABI, and signature
+        run: ./scripts/verify-android-apk.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flectar-mail-android-test-signed-arm64
+          path: target/android/**/*.apk
+          if-no-files-found: error
+
+  ios:
+    name: iOS unsigned archive (arm64)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: native-ios-arm64
+
+      - name: Install Xcode project generator
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: platform/ios
+        run: xcodegen generate
+
+      - name: Build unsigned device archive
+        env:
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
+          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: |
+          mkdir -p target/ios
+          xcodebuild \
+            -project platform/ios/FlectarMail.xcodeproj \
+            -scheme FlectarMail \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/target/ios/FlectarMail.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+          ditto -c -k --sequesterRsrc --keepParent \
+            target/ios/FlectarMail.xcarchive \
+            target/ios/flectar-mail-ios-unsigned-xcarchive.zip
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: flectar-mail-ios-arm64-unsigned
+          path: target/ios/flectar-mail-ios-unsigned-xcarchive.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Download Linux packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: flectar-mail-linux-x64
+          path: release-assets/linux
+
+      - name: Download Windows package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: flectar-mail-windows-x64
+          path: release-assets/windows
+
+      - name: Download macOS package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: flectar-mail-macos-arm64
+          path: release-assets/macos
+
+      - name: Prepare release downloads
+        run: |
+          mkdir -p dist
+          find release-assets -type f \( \
+            -name '*.AppImage' -o \
+            -name '*.deb' -o \
+            -name '*.zip' \
+          \) -exec cp '{}' dist/ \;
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 4
+          cd dist
+          sha256sum ./* > SHA256SUMS
+
+      - name: Publish tagged release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --verify-tag \
+              --title "Flectar Mail ${GITHUB_REF_NAME#v}" \
+              --generate-notes
+          fi

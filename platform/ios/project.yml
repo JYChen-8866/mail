@@ -1,0 +1,40 @@
+name: FlectarMail
+options:
+  bundleIdPrefix: com.flectar
+settings:
+  base:
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    PRODUCT_BUNDLE_IDENTIFIER: com.flectar.mail
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+targets:
+  FlectarMail:
+    type: application
+    platform: iOS
+    deploymentTarget: "12.0"
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Flectar Mail
+        UILaunchScreen: {}
+        UIRequiresFullScreen: false
+    sources:
+      - path: Assets.xcassets
+        buildPhase: resources
+    postCompileScripts:
+      - name: Build Rust application
+        script: |
+          "$SRCROOT/build-with-cargo.sh" flectar-mail
+        basedOnDependencyAnalysis: false
+    postBuildScripts:
+      - name: Bundle license notices
+        script: |
+          license_root="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Licenses"
+          app_license_dir="$license_root/Flectar Mail"
+          font_license_dir="$license_root/Google Sans Flex"
+          mkdir -p "$app_license_dir" "$font_license_dir"
+          cp "$SRCROOT/../../LICENSE" "$app_license_dir/LICENSE"
+          cp -R "$SRCROOT/../../LICENSES" "$app_license_dir/LICENSES"
+          cp "$SRCROOT/../../THIRD_PARTY_NOTICES.md" "$app_license_dir/THIRD_PARTY_NOTICES.md"
+          cp "$SRCROOT/../../resources/fonts/google-sans-flex/OFL.txt" "$font_license_dir/OFL.txt"
+          cp "$SRCROOT/../../resources/fonts/google-sans-flex/README.md" "$font_license_dir/README.md"
+        basedOnDependencyAnalysis: false

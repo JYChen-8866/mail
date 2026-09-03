@@ -1,0 +1,792 @@
+import { HorizontalBox, ListView, ScrollView, VerticalBox } from "std-widgets.slint";
+import { ContactAccountRow, ContactRow } from "../models.slint";
+import { Avatar } from "../components/avatar.slint";
+import { Button } from "../components/button.slint";
+import { IconButton, LineEdit, TextEdit, ToolbarIconButton } from "../components/controls.slint";
+import { SidebarItem, SidebarSectionHeader } from "../components/sidebar.slint";
+import { TypeScale } from "../typography.slint";
+import { LayoutMetrics } from "../design-system.slint";
+import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading, WorkspaceTitleRow } from "../components/workspace-layout.slint";
+
+component FieldLabel inherits Text {
+    in property <string> label;
+    text: root.label;
+    height: 18px;
+    color: #7a7b78;
+    font-size: TypeScale.caption;
+    font-weight: 700;
+    vertical-alignment: bottom;
+}
+
+// Contacts deliberately follows the mail workspace's three-column rhythm:
+// scope navigation, searchable rows, and a focused detail/editor surface.
+export component ContactsView inherits Rectangle {
+    in property <bool> compact: false;
+    in property <string> layout-mode: "default";
+    in property <bool> dark-mode: false;
+    in property <[ContactRow]> contacts: [];
+    in property <[ContactAccountRow]> account-contacts: [];
+    in property <string> query: "";
+    in-out property <string> filter: "all";
+    in property <string> selected-scope: "All contacts";
+    in property <string> scope-label: "All contacts";
+    in property <string> status: "";
+    in property <int> visible-count: 0;
+    in property <bool> can-load-more: false;
+    in property <bool> loading-more: false;
+    in property <int> content-revision: 0;
+    in property <int> total-count: 0;
+    in property <int> favorite-count: 0;
+    in property <bool> has-selected: false;
+    in-out property <int> selected-id: 0;
+    in-out property <string> edit-name: "";
+    in-out property <string> edit-email: "";
+    in-out property <string> edit-phone: "";
+    in-out property <string> edit-company: "";
+    in-out property <string> edit-job-title: "";
+    in-out property <string> edit-website: "";
+    in-out property <string> edit-birthday: "";
+    in-out property <string> edit-postal-address: "";
+    in-out property <string> edit-notes: "";
+    in-out property <string> edit-tags: "";
+    in-out property <bool> edit-favorite: false;
+    in property <string> edit-initials: "?";
+    in property <string> interaction-label: "";
+    private property <bool> delete-confirming: false;
+    in-out property <bool> detail-page-visible: false;
+    in-out property <bool> sidebar-collapsed: false;
+    private property <bool> single-surface: root.compact || root.layout-mode == "minimal";
+    private property <bool> list-visible: !root.single-surface || !root.detail-page-visible;
+    private property <bool> detail-visible: !root.single-surface || root.detail-page-visible;
+
+    in property <color> accent;
+    in property <color> accent-soft;
+    in property <color> avatar-bg;
+    in property <color> body-text;
+    in property <color> border;
+    in property <color> border-subtle;
+    in property <color> control-bg;
+    in property <color> heading;
+    in property <color> muted-control-bg;
+    in property <color> muted-text;
+    in property <color> secondary-text;
+    in property <color> selected-row;
+    in property <color> sidebar-bg;
+    in property <color> surface;
+    in property <color> surface-raised;
+    in property <color> title-color;
+
+    callback search(string);
+    callback select-filter(string);
+    callback select-contact(int);
+    callback refresh;
+    callback load-more;
+    callback new-contact;
+    callback save-contact(int, string, string, string, string, string, string, string, string, string, string, bool);
+    callback delete-contact(int);
+    callback compose-to-contact(string);
+
+    private property <length> pagination-prefetch-distance: 246px;
+    private property <bool> pagination-armed: true;
+    private property <int> pagination-request-row-count: -1;
+    private property <int> pagination-request-revision: -1;
+    private property <length> pagination-request-height: -1px;
+    private property <int> pagination-row-count: root.contacts.length;
+    private property <length> pagination-content-height: contact-list.viewport-height;
+
+    function maybe-load-more() {
+        if (root.can-load-more
+            && !root.loading-more
+            && root.pagination-armed
+            && contact-list.viewport-height + contact-list.viewport-y
+                - contact-list.visible-height <= root.pagination-prefetch-distance) {
+            root.pagination-armed = false;
+            root.pagination-request-row-count = root.pagination-row-count;
+            root.pagination-request-revision = root.content-revision;
+            root.pagination-request-height = root.pagination-content-height;
+            root.load-more();
+        }
+    }
+
+    function reset-pagination() {
+        root.pagination-armed = true;
+        root.pagination-request-row-count = -1;
+        root.pagination-request-revision = -1;
+        root.pagination-request-height = -1px;
+        contact-list.viewport-y = 0px;
+        pagination-check.restart();
+    }
+
+    function user-scrolled() {
+        if (!root.loading-more
+            && !root.pagination-armed
+            && root.content-revision == root.pagination-request-revision) {
+            root.pagination-armed = true;
+        }
+        root.maybe-load-more();
+    }
+
+    changed selected-id => { root.delete-confirming = false; }
+    changed query => {
+        root.reset-pagination();
+    }
+    changed filter => {
+        root.reset-pagination();
+    }
+    changed selected-scope => {
+        root.reset-pagination();
+    }
+    changed pagination-content-height => {
+        if (!root.pagination-armed
+            && root.content-revision != root.pagination-request-revision
+            && root.pagination-content-height != root.pagination-request-height) {
+            root.pagination-armed = true;
+        }
+        pagination-check.restart();
+    }
+    changed content-revision => {
+        if (!root.pagination-armed
+            && root.content-revision != root.pagination-request-revision
+            && (root.pagination-row-count == root.pagination-request-row-count
+                || root.pagination-content-height != root.pagination-request-height)) {
+            root.pagination-armed = true;
+        }
+        pagination-check.restart();
+    }
+    changed can-load-more => { pagination-check.restart(); }
+    changed loading-more => {
+        if (!root.loading-more) {
+            pagination-check.restart();
+        }
+    }
+    changed layout-mode => {
+        if (root.layout-mode == "minimal") {
+            root.detail-page-visible = false;
+        }
+    }
+
+    function open-filter(scope: string) {
+        root.detail-page-visible = false;
+        root.select-filter(scope);
+    }
+
+    pagination-check := Timer {
+        interval: 1ms;
+        running: true;
+        triggered => {
+            self.stop();
+            root.maybe-load-more();
+        }
+    }
+
+    HorizontalBox {
+        padding: 0px;
+        spacing: 0px;
+
+        CollapsibleWorkspaceSidebar {
+            visible: !root.compact;
+            collapsed: root.compact || root.sidebar-collapsed;
+            surface-color: root.sidebar-bg;
+            divider-color: root.border;
+
+            VerticalBox {
+                padding-top: LayoutMetrics.sidebar-action-top;
+                padding-right: LayoutMetrics.sidebar-inset;
+                padding-bottom: 12px;
+                padding-left: LayoutMetrics.sidebar-inset;
+                spacing: 8px;
+
+                Button {
+                    height: LayoutMetrics.sidebar-action-height;
+                    text: @tr("New contact");
+                    primary: true;
+                    has-icon: true;
+                    icon: @image-url("../icons/solar-icons/user-plus-rounded-bold.svg");
+                    clicked => {
+                        root.detail-page-visible = true;
+                        root.new-contact();
+                    }
+                }
+
+                contact-nav-scroll := ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.visible-width;
+                    horizontal-scrollbar-policy: always-off;
+
+                    VerticalBox {
+                        x: 0px;
+                        width: max(0px, contact-nav-scroll.visible-width - LayoutMetrics.sidebar-scrollbar-gutter);
+                        padding: 0px;
+                        spacing: 8px;
+                        alignment: start;
+
+                Rectangle { height: 8px; }
+                WorkspaceMiniHeading {
+                    label: @tr("UNIFIED");
+                    label-color: root.muted-text;
+                }
+
+                unified-section := SidebarSectionHeader {
+                    label: @tr("Unified contacts");
+                    icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                    sidebar-background: root.sidebar-bg;
+                    body-color: root.body-text;
+                    muted-color: root.muted-text;
+                    hover-background: root.muted-control-bg;
+                    icon-color: root.secondary-text;
+                }
+
+                if unified-section.open : VerticalBox {
+                    padding: 0px;
+                    spacing: 3px;
+
+                    SidebarItem {
+                        label: @tr("All contacts");
+                        count: root.total-count > 0 ? root.total-count : "";
+                        scope: "all";
+                        icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                        selected: root.selected-scope == "All contacts";
+                        prominent: true;
+                        sidebar-background: root.sidebar-bg;
+                        selection-background: root.accent-soft;
+                        accent-color: root.accent;
+                        body-color: root.body-text;
+                        muted-color: root.muted-text;
+                        clicked(scope) => { root.open-filter(scope); }
+                    }
+
+                    SidebarItem {
+                        label: @tr("Favorites");
+                        count: root.favorite-count > 0 ? root.favorite-count : "";
+                        scope: "favorites";
+                        icon: @image-url("../icons/solar-icons/star-bold.svg");
+                        selected: root.selected-scope == "Favorites";
+                        sidebar-background: root.sidebar-bg;
+                        selection-background: root.accent-soft;
+                        accent-color: root.accent;
+                        body-color: root.body-text;
+                        muted-color: root.muted-text;
+                        clicked(scope) => { root.open-filter(scope); }
+                    }
+                }
+
+                WorkspaceMiniHeading {
+                    visible: root.account-contacts.length > 0;
+                    label: @tr("ACCOUNTS");
+                    label-color: root.muted-text;
+                }
+
+                for account in root.account-contacts : VerticalBox {
+                    padding: 0px;
+                    spacing: 3px;
+                    vertical-stretch: 0;
+
+                    account-section := SidebarSectionHeader {
+                        label: account.name;
+                        detail: account.email;
+                        avatar: account.initials;
+                        avatar-image: account.avatar;
+                        has-avatar-image: account.has-avatar;
+                        has-avatar: true;
+                        sidebar-background: root.sidebar-bg;
+                        hover-background: root.muted-control-bg;
+                        body-color: root.body-text;
+                        muted-color: root.muted-text;
+                        icon-color: root.secondary-text;
+                    }
+
+                    if account-section.open : SidebarItem {
+                        label: @tr("Contacts");
+                        count: account.count;
+                        scope: "Account:" + account.id;
+                        icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                        selected: account.selected;
+                        prominent: true;
+                        sidebar-background: root.sidebar-bg;
+                        selection-background: root.accent-soft;
+                        accent-color: root.accent;
+                        body-color: root.body-text;
+                        muted-color: root.muted-text;
+                        clicked(scope) => { root.open-filter(scope); }
+                    }
+                }
+
+                Text {
+                    height: 54px;
+                    text: @tr("People discovered from your conversations appear here automatically.");
+                    color: root.muted-text;
+                    font-size: TypeScale.caption;
+                    wrap: word-wrap;
+                }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            visible: root.list-visible;
+            min-width: 0px;
+            preferred-width: root.single-surface ? 0px : LayoutMetrics.list-pane-width;
+            max-width: !root.list-visible ? 0px : root.single-surface ? root.width : LayoutMetrics.list-pane-width;
+            horizontal-stretch: root.list-visible && root.single-surface ? 1 : 0;
+            background: root.surface;
+
+            VerticalBox {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                padding: 0px;
+                spacing: 0px;
+
+                Rectangle {
+                    height: root.compact ? 116px : 102px;
+                    VerticalBox {
+                        padding-top: root.compact ? 8px : LayoutMetrics.workspace-action-center-y - 20px;
+                        padding-right: root.compact ? 10px : 12px;
+                        padding-bottom: root.compact ? 8px : 2px;
+                        padding-left: root.compact ? 10px : 12px;
+                        spacing: 8px;
+
+                        WorkspaceTitleRow {
+                            height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
+                            item-spacing: 6px;
+                            title: root.selected-scope == "All contacts" ? @tr("All contacts")
+                                : root.selected-scope == "Favorites" ? @tr("Favorites")
+                                : root.scope-label;
+                            title-font-size: root.compact ? TypeScale.title-small : TypeScale.heading-small;
+                            title-weight: 600;
+                            show-leading: !root.compact;
+                            leading-icon: @image-url("../icons/solar-icons/sidebar-outline.svg");
+                            leading-tooltip: root.sidebar-collapsed ? @tr("Show contact groups") : @tr("Hide contact groups");
+                            leading-accessible-id: "contacts-sidebar-button";
+                            leading-ghost: true;
+                            leading-clicked => { root.sidebar-collapsed = !root.sidebar-collapsed; }
+                            Text {
+                                text: root.visible-count;
+                                color: root.muted-text;
+                                font-size: TypeScale.caption;
+                                vertical-alignment: center;
+                            }
+                            ToolbarIconButton {
+                                visible: root.compact || root.sidebar-collapsed;
+                                compact: root.compact;
+                                icon: @image-url("../icons/solar-icons/user-plus-rounded-bold.svg");
+                                primary: true;
+                                tooltip-text: @tr("New contact");
+                                accessible-id: "contacts-new-button";
+                                clicked => {
+                                    root.detail-page-visible = true;
+                                    root.new-contact();
+                                }
+                            }
+                        }
+
+                        HorizontalBox {
+                            height: 40px;
+                            padding: 0px;
+                            spacing: 6px;
+
+                            search-field := Rectangle {
+                                horizontal-stretch: 1;
+                                LineEdit {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    text: root.query;
+                                    placeholder-text: @tr("Search contacts");
+                                    show-leading-icon: true;
+                                    leading-icon: @image-url("../icons/solar-icons/magnifier-outline.svg");
+                                    leading-icon-color: root.secondary-text;
+                                    trailing-content-width: 40px;
+                                    edited(value) => { root.search(value); }
+                                }
+                                filter-menu := ContextMenuArea {
+                                    x: parent.width - 40px;
+                                    width: 40px;
+                                    height: 40px;
+                                    IconButton {
+                                        width: 40px;
+                                        height: 40px;
+                                        icon: @image-url("../icons/solar-icons/filter-outline.svg");
+                                        icon-color: root.filter == "all" ? root.secondary-text : root.accent;
+                                        ghost: true;
+                                        hover-background: root.muted-control-bg;
+                                        active: root.filter != "all";
+                                        active-background: root.accent-soft;
+                                        tooltip-text: @tr("Filter contacts");
+                                        accessible-id: "contacts-filter-button";
+                                        clicked => { filter-menu.show({ x: 0px, y: 40px }); }
+                                    }
+                                    Menu {
+                                        MenuItem { title: @tr("All contacts"); activated => { root.open-filter("all"); } }
+                                        MenuItem { title: @tr("Favorites"); activated => { root.open-filter("favorites"); } }
+                                    }
+                                }
+                            }
+
+                            IconButton {
+                                width: 40px;
+                                height: 40px;
+                                icon: @image-url("../icons/solar-icons/refresh-outline.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Reload contacts");
+                                accessible-id: "contacts-refresh-button";
+                                clicked => { root.refresh(); }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: root.border-subtle; }
+                Rectangle {
+                    height: 24px;
+                    Text {
+                        x: 12px;
+                        width: parent.width - 24px;
+                        height: parent.height;
+                        text: root.status;
+                        color: root.muted-text;
+                        font-size: TypeScale.caption;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                    contact-list := ListView {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: parent.height;
+                        horizontal-scrollbar-policy: always-off;
+                        mouse-drag-pan-enabled: root.compact;
+                        scrolled => { root.user-scrolled(); }
+
+                            for contact in root.contacts : Rectangle {
+                                x: 12px;
+                                width: max(0px, contact-list.width - 16px);
+                                height: 82px;
+                                border-radius: 6px;
+                                background: contact.selected ? root.selected-row : root.surface;
+
+                                Avatar {
+                                    x: 14px;
+                                    y: 14px;
+                                    size: 38px;
+                                    fallback: contact.initials;
+                                    color-tone: contact.selected ? -1 : contact.avatar-tone;
+                                    dark-mode: root.dark-mode;
+                                    background-color: contact.selected ? root.accent-soft : root.avatar-bg;
+                                    foreground-color: contact.selected ? root.accent : root.secondary-text;
+                                }
+
+                                Rectangle {
+                                    x: 64px;
+                                    y: 9px;
+                                    width: max(0px, parent.width - 78px);
+                                    height: 64px;
+                                    Text {
+                                        x: 0px;
+                                        y: 0px;
+                                        width: max(0px, parent.width - 28px);
+                                        height: 22px;
+                                        text: contact.name == "" ? contact.email : contact.name;
+                                        color: root.heading;
+                                        font-size: TypeScale.body-large;
+                                        font-weight: contact.selected ? 700 : 500;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    Image {
+                                        visible: contact.favorite;
+                                        x: parent.width - 18px;
+                                        y: 3px;
+                                        width: 15px;
+                                        height: 15px;
+                                        source: @image-url("../icons/solar-icons/star-bold.svg");
+                                        colorize: root.accent;
+                                        image-fit: contain;
+                                        accessible-role: none;
+                                    }
+                                    Text {
+                                        x: 0px;
+                                        y: 22px;
+                                        width: parent.width;
+                                        height: 20px;
+                                        text: contact.email;
+                                        color: root.body-text;
+                                        font-size: TypeScale.secondary;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        x: 0px;
+                                        y: 43px;
+                                        width: parent.width;
+                                        height: 18px;
+                                        text: contact.detail != "" ? contact.detail : contact.last_contacted;
+                                        color: root.muted-text;
+                                        font-size: TypeScale.caption;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                TouchArea {
+                                    accessible-role: button;
+                                    accessible-label: @tr("Open {}", contact.name == "" ? contact.email : contact.name);
+                                    accessible-id: "contact-row-" + contact.id;
+                                    clicked => {
+                                        root.detail-page-visible = true;
+                                        root.select-contact(contact.id);
+                                    }
+                                    mouse-cursor: pointer;
+                                }
+                            }
+                        }
+
+                    if root.contacts.length == 0 : Text {
+                        x: 20px;
+                        width: parent.width - 40px;
+                        height: min(parent.height, 130px);
+                        text: root.query == "" ? @tr("No contacts yet. Create one or sync some mail.") : @tr("No contacts match this search.");
+                        color: root.muted-text;
+                        font-size: TypeScale.secondary;
+                        wrap: word-wrap;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Rectangle { visible: !root.single-surface; width: root.single-surface ? 0px : 1px; background: root.border; }
+
+        Rectangle {
+            visible: root.detail-visible;
+            min-width: 0px;
+            preferred-width: 0px;
+            max-width: root.detail-visible ? root.width : 0px;
+            horizontal-stretch: root.detail-visible ? 1 : 0;
+            background: root.surface-raised;
+
+            if root.has-selected : VerticalBox {
+                width: parent.width;
+                height: parent.height;
+                spacing: 0px;
+
+                    Rectangle {
+                    height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
+                    HorizontalBox {
+                        padding-top: 0px;
+                        padding-left: root.compact ? 8px : 14px;
+                        padding-right: root.compact ? 8px : 14px;
+                        padding-bottom: 0px;
+                        spacing: 6px;
+                        cross-axis-alignment: center;
+                        ToolbarIconButton {
+                            visible: root.single-surface;
+                            compact: root.compact;
+                            icon: root.compact
+                                ? @image-url("../icons/solar-icons/arrow-left-outline.svg")
+                                : @image-url("../icons/solar-icons/close-outline.svg");
+                            icon-color: root.secondary-text;
+                            hover-background: root.muted-control-bg;
+                            tooltip-text: @tr("Back to contacts");
+                            accessible-id: "contact-back-button";
+                            clicked => {
+                                root.delete-confirming = false;
+                                root.detail-page-visible = false;
+                            }
+                        }
+                        Text {
+                            text: root.selected-id > 0 ? @tr("Contact details") : @tr("New contact");
+                            color: root.secondary-text;
+                            font-size: TypeScale.caption;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        ToolbarIconButton {
+                            compact: root.compact;
+                            icon: root.edit-favorite ? @image-url("../icons/solar-icons/star-bold.svg") : @image-url("../icons/solar-icons/star-outline.svg");
+                            icon-color: root.edit-favorite ? root.accent : root.secondary-text;
+                            hover-background: root.muted-control-bg;
+                            active-background: root.accent-soft;
+                            active: root.edit-favorite;
+                            tooltip-text: root.edit-favorite ? @tr("Remove from favorites") : @tr("Add to favorites");
+                            clicked => { root.edit-favorite = !root.edit-favorite; }
+                        }
+                        if root.delete-confirming : Text {
+                            text: @tr("Delete this contact?");
+                            color: root.body-text;
+                            font-size: TypeScale.caption;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        if root.delete-confirming : Button {
+                            text: @tr("Cancel");
+                            clicked => { root.delete-confirming = false; }
+                        }
+                        if root.delete-confirming : Button {
+                            text: @tr("Delete");
+                            clicked => {
+                                root.delete-confirming = false;
+                                root.delete-contact(root.selected-id);
+                            }
+                        }
+                        if !root.delete-confirming : ToolbarIconButton {
+                            visible: root.selected-id > 0;
+                            compact: root.compact;
+                            icon: @image-url("../icons/solar-icons/trash-bin-trash-outline.svg");
+                            icon-color: root.secondary-text;
+                            hover-background: root.muted-control-bg;
+                            tooltip-text: @tr("Delete contact");
+                            clicked => { root.delete-confirming = true; }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: root.border; }
+
+                detail-scroll := ScrollView {
+                    vertical-stretch: 1;
+                    viewport-width: self.visible-width;
+                    horizontal-scrollbar-policy: always-off;
+                    mouse-drag-pan-enabled: root.compact;
+
+                    VerticalBox {
+                        width: detail-scroll.visible-width;
+                        height: self.preferred-height;
+                        padding-top: 22px;
+                        padding-right: root.compact ? 16px : 28px;
+                        padding-bottom: 28px;
+                        padding-left: root.compact ? 16px : 28px;
+                        spacing: 7px;
+
+                        HorizontalBox {
+                            height: 58px;
+                            spacing: 14px;
+                            Avatar {
+                                size: 52px;
+                                fallback: root.edit-initials;
+                                background-color: root.accent-soft;
+                                foreground-color: root.accent;
+                            }
+                            VerticalBox {
+                                spacing: 0px;
+                                Text {
+                                    height: 30px;
+                                    text: root.edit-name == "" ? (root.edit-email == "" ? @tr("New contact") : root.edit-email) : root.edit-name;
+                                    color: root.title-color;
+                                    font-size: TypeScale.display;
+                                    font-weight: 700;
+                                    overflow: elide;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    height: 22px;
+                                    text: root.interaction-label;
+                                    color: root.muted-text;
+                                    font-size: TypeScale.caption;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        Rectangle { height: 8px; }
+                        FieldLabel { label: @tr("NAME"); }
+                        LineEdit { text <=> root.edit-name; placeholder-text: @tr("Full name"); }
+                        FieldLabel { label: @tr("EMAIL"); }
+                        LineEdit { text <=> root.edit-email; placeholder-text: @tr("name@example.com"); }
+
+                        HorizontalBox {
+                            spacing: 10px;
+                            VerticalBox {
+                                spacing: 5px;
+                                FieldLabel { label: @tr("PHONE"); }
+                                LineEdit { text <=> root.edit-phone; placeholder-text: @tr("+1 555 0100"); }
+                            }
+                            VerticalBox {
+                                spacing: 5px;
+                                FieldLabel { label: @tr("BIRTHDAY"); }
+                                LineEdit { text <=> root.edit-birthday; placeholder-text: @tr("YYYY-MM-DD"); }
+                            }
+                        }
+
+                        HorizontalBox {
+                            spacing: 10px;
+                            VerticalBox {
+                                spacing: 5px;
+                                FieldLabel { label: @tr("COMPANY"); }
+                                LineEdit { text <=> root.edit-company; placeholder-text: @tr("Company"); }
+                            }
+                            VerticalBox {
+                                spacing: 5px;
+                                FieldLabel { label: @tr("JOB TITLE"); }
+                                LineEdit { text <=> root.edit-job-title; placeholder-text: @tr("Role"); }
+                            }
+                        }
+
+                        FieldLabel { label: @tr("WEBSITE"); }
+                        LineEdit { text <=> root.edit-website; placeholder-text: @tr("https://example.com"); }
+                        FieldLabel { label: @tr("ADDRESS"); }
+                        TextEdit { height: 72px; text <=> root.edit-postal-address; placeholder-text: @tr("Postal address"); }
+                        FieldLabel { label: @tr("TAGS"); }
+                        LineEdit { text <=> root.edit-tags; placeholder-text: @tr("customer, design, london"); }
+                        FieldLabel { label: @tr("NOTES"); }
+                        TextEdit { height: 110px; text <=> root.edit-notes; placeholder-text: @tr("Notes about this contact"); }
+
+                        Rectangle { height: 8px; }
+                        HorizontalBox {
+                            height: 36px;
+                            spacing: 8px;
+                            Button {
+                                visible: root.edit-email != "";
+                                text: @tr("Send email");
+                                has-icon: true;
+                                icon: @image-url("../icons/solar-icons/plane-bold.svg");
+                                clicked => { root.compose-to-contact(root.edit-email); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            Button {
+                                text: @tr("Save contact");
+                                primary: true;
+                                clicked => {
+                                    root.save-contact(
+                                        root.selected-id, root.edit-name, root.edit-email,
+                                        root.edit-phone, root.edit-company, root.edit-job-title,
+                                        root.edit-website, root.edit-birthday,
+                                        root.edit-postal-address, root.edit-notes,
+                                        root.edit-tags, root.edit-favorite
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !root.has-selected : VerticalBox {
+                width: parent.width;
+                height: parent.height;
+                alignment: center;
+                spacing: 8px;
+                Image {
+                    width: 44px;
+                    height: 44px;
+                    source: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                    colorize: root.muted-text;
+                    image-fit: contain;
+                    accessible-role: none;
+                }
+                Text { text: @tr("Select a contact"); color: root.heading; font-size: TypeScale.heading; font-weight: 700; horizontal-alignment: center; }
+                Text { text: @tr("View and edit contact details here."); color: root.muted-text; font-size: TypeScale.secondary; horizontal-alignment: center; }
+                Button { text: @tr("New contact"); clicked => { root.new-contact(); } }
+            }
+        }
+    }
+}

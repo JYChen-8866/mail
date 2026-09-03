@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name=Flectar Mail
+GenericName=Email Client
+Comment=Native email client built with Slint and Blitz
+Exec=flectar-mail
+Icon=com.flectar.mail
+Type=Application
+Categories=Office;Email;
+Keywords=Mail;Email;IMAP;Gmail;Outlook;Calendar;
+Terminal=false
+StartupNotify=true
+X-AppImage-Name=Flectar Mail
+X-AppImage-Version=0.1.0
+X-AppImage-Arch=x86_64

@@ -1,0 +1,77 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { TypeScale } from "../typography.slint";
+
+// Shared by onboarding and account settings so provider entry points keep the
+// same recognizable brand treatment throughout the app.
+export component ProviderButton inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> colorize-icon: false;
+    in property <length> icon-offset-x: 0px;
+    in property <bool> enabled: true;
+    in property <color> foreground;
+    in property <color> muted;
+    in property <color> surface;
+    in property <color> hover-surface;
+    in property <color> button-border;
+    callback clicked;
+
+    height: 52px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.button-border;
+    background: provider-hit.has-hover && root.enabled ? root.hover-surface : root.surface;
+    opacity: root.enabled ? 1 : 0.5;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+    animate background { duration: 150ms; }
+
+    HorizontalBox {
+        padding-left: 16px;
+        padding-right: 16px;
+        spacing: 12px;
+        cross-axis-alignment: center;
+
+        Rectangle {
+            width: 20px;
+            height: 20px;
+            background: transparent;
+
+            Image {
+                x: root.icon-offset-x;
+                width: 20px;
+                height: 20px;
+                source: root.icon;
+                colorize: root.colorize-icon ? root.foreground : transparent;
+                image-fit: contain;
+                accessible-role: none;
+            }
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.text;
+            color: root.foreground;
+            font-size: TypeScale.body-large;
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: "›";
+            color: root.muted;
+            font-size: TypeScale.title-large;
+            vertical-alignment: center;
+        }
+    }
+
+    provider-hit := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+        mouse-cursor: pointer;
+    }
+}

@@ -1,0 +1,167 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { AppTheme, LayoutMetrics } from "../design-system.slint";
+import { TypeScale } from "../typography.slint";
+import { ToolbarIconButton } from "controls.slint";
+
+// All top-level workspaces are placed by this component. This prevents a view
+// from silently adding the product-rail offset or mobile navigation allowance
+// a second time.
+export component WorkspaceFrame inherits Rectangle {
+    in property <bool> compact: false;
+    in property <bool> reserve-compact-navigation: false;
+    in property <length> available-width;
+    in property <length> available-height;
+
+    x: root.compact ? 0px : LayoutMetrics.product-rail-width;
+    y: 0px;
+    width: max(0px, root.available-width - self.x);
+    height: max(0px, root.available-height - (root.compact && root.reserve-compact-navigation ? LayoutMetrics.compact-navigation-height : 0px));
+    background: AppTheme.page-bg;
+    clip: true;
+
+    @children
+}
+
+// Feature-specific sidebars share their outer geometry and divider while
+// retaining their own mailboxes, calendars, contacts, or settings controls.
+export component WorkspaceSidebarSurface inherits Rectangle {
+    in property <color> surface-color: AppTheme.sidebar-bg;
+    in property <color> divider-color: AppTheme.border;
+
+    background: root.surface-color;
+    clip: true;
+
+    @children
+
+    Rectangle {
+        x: parent.width - LayoutMetrics.divider-width;
+        y: 0px;
+        width: LayoutMetrics.divider-width;
+        height: parent.height;
+        background: root.divider-color;
+    }
+}
+
+// Every feature sidebar uses the same animated extent. Animating a custom
+// property keeps the layout reactive for the full transition; snapping
+// min/max constraints made the previous mail-only implementation jump.
+export component CollapsibleWorkspaceSidebar inherits WorkspaceSidebarSurface {
+    in-out property <bool> collapsed: false;
+    out property <length> current-width: animated-width;
+    private property <length> animated-width: root.collapsed ? 0px : LayoutMetrics.sidebar-width;
+
+    width: root.animated-width;
+    clip: true;
+
+    animate animated-width { duration: 160ms; easing: ease-in-out; }
+}
+
+// Section labels use one compact typographic treatment across mail folders,
+// contact groups, and calendar sources.
+export component WorkspaceMiniHeading inherits Text {
+    in property <string> label;
+    in property <color> label-color: AppTheme.muted;
+
+    height: 18px;
+    text: root.label;
+    color: root.label-color;
+    font-size: TypeScale.micro;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    vertical-alignment: center;
+}
+
+// Shared title row used both inside two-row list headers and standalone page
+// headers. Feature actions are injected after the title.
+export component WorkspaceTitleRow inherits Rectangle {
+    in property <string> title;
+    in property <bool> show-leading: false;
+    in property <image> leading-icon;
+    in property <string> leading-tooltip: "";
+    in property <string> leading-accessible-id: "";
+    in property <length> horizontal-inset: 0px;
+    in property <length> item-spacing: 6px;
+    in property <relative-font-size> title-font-size: TypeScale.title-small;
+    in property <int> title-weight: 700;
+    in property <bool> leading-ghost: false;
+    callback leading-clicked;
+
+    height: LayoutMetrics.touch-target;
+    background: transparent;
+
+    HorizontalBox {
+        padding-top: 0px;
+        padding-left: root.horizontal-inset;
+        padding-right: root.horizontal-inset;
+        padding-bottom: 0px;
+        spacing: root.item-spacing;
+        cross-axis-alignment: center;
+
+        ToolbarIconButton {
+            visible: root.show-leading;
+            compact: root.height >= LayoutMetrics.touch-target;
+            width: root.show-leading ? (self.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size) : 0px;
+            icon: root.leading-icon;
+            icon-color: AppTheme.secondary;
+            ghost: root.leading-ghost;
+            idle-background: AppTheme.control-bg;
+            hover-background: AppTheme.muted-control-bg;
+            active-background: AppTheme.accent-soft;
+            tooltip-text: root.leading-tooltip;
+            accessible-id: root.leading-accessible-id;
+            clicked => { root.leading-clicked(); }
+        }
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.title;
+            color: AppTheme.title;
+            font-size: root.title-font-size;
+            font-weight: root.title-weight;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        @children
+    }
+}
+
+// Standalone compact header used by calendar and settings. Mail and contacts
+// share WorkspaceTitleRow above a feature-specific search field.
+export component CompactPageHeader inherits Rectangle {
+    in property <string> title;
+    in property <bool> show-leading: false;
+    in property <image> leading-icon;
+    in property <string> leading-tooltip: "";
+    in property <string> leading-accessible-id: "";
+    in property <color> background-color: AppTheme.surface;
+    in property <bool> leading-ghost: false;
+    callback leading-clicked;
+
+    height: LayoutMetrics.compact-header-height;
+    background: root.background-color;
+
+    WorkspaceTitleRow {
+        x: 0px;
+        y: (parent.height - self.height) / 2;
+        width: parent.width;
+        title: root.title;
+        show-leading: root.show-leading;
+        leading-icon: root.leading-icon;
+        leading-tooltip: root.leading-tooltip;
+        leading-accessible-id: root.leading-accessible-id;
+        leading-ghost: root.leading-ghost;
+        horizontal-inset: LayoutMetrics.compact-inset;
+        leading-clicked => { root.leading-clicked(); }
+
+        @children
+    }
+
+    Rectangle {
+        x: 0px;
+        y: parent.height - LayoutMetrics.divider-width;
+        width: parent.width;
+        height: LayoutMetrics.divider-width;
+        background: AppTheme.border-subtle;
+    }
+}

@@ -1,0 +1,478 @@
+import { HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
+import { EmailRow } from "../models.slint";
+import { Avatar } from "../components/avatar.slint";
+import { IconButton, LineEdit, ToolbarIconButton } from "../components/controls.slint";
+import { TypeScale } from "../typography.slint";
+import { LayoutMetrics } from "../design-system.slint";
+import { WorkspaceTitleRow } from "../components/workspace-layout.slint";
+
+export component MailListPane inherits Rectangle {
+    in property <bool> compact: false;
+    // Single-surface navigation is also used by the desktop Minimal layout;
+    // keep it separate from compact sizing so desktop controls stay dense.
+    in property <bool> single-pane-navigation: root.compact;
+    in property <bool> show-avatars: true;
+    in property <bool> dense: false;
+    in property <bool> loading: false;
+    in property <[EmailRow]> emails: [];
+    in property <string> selected_scope: "Unified Inbox";
+    in property <string> total_count: "";
+    in property <string> search_query: "";
+    in property <string> search_filter: "All mail";
+    in property <string> list_status: "";
+    in property <bool> sync_in_progress: false;
+    in property <bool> can_load_more: false;
+    in property <bool> loading_more: false;
+    in property <int> content_revision: 0;
+    in-out property <bool> mail_sidebar_collapsed: false;
+    in property <color> accent;
+    in property <color> accent-soft;
+    in property <color> avatar-bg;
+    in property <color> avatar-selected-bg;
+    in property <color> body-text;
+    in property <color> border;
+    in property <color> border-subtle;
+    in property <color> control-bg;
+    in property <color> faint-text;
+    in property <color> heading;
+    in property <color> muted-control-bg;
+    in property <color> muted-text;
+    in property <color> secondary-text;
+    in property <color> selected-row;
+    in property <color> surface;
+    in property <color> title-color;
+    callback select_email(int);
+    callback search_changed(string);
+    callback set_search_filter(string);
+    callback load_more();
+    callback sync_mail();
+    callback open_folders();
+    callback open_compose();
+    callback message_action_for_email(int, string);
+
+    // Prefetch while several rows remain instead of waiting for the physical
+    // bottom. The ListView stays virtualized; this callback only crosses into
+    // Rust when the viewport enters the trailing buffer.
+    private property <length> pagination-prefetch-distance: root.dense ? 132px : 288px;
+    private property <bool> pagination-armed: true;
+    private property <int> pagination-request-row-count: -1;
+    private property <int> pagination-request-revision: -1;
+    private property <length> pagination-request-height: -1px;
+    private property <int> pagination-row-count: root.emails.length;
+    private property <length> pagination-content-height: mail-list-scroll.viewport-height;
+
+    function maybe-load-more() {
+        if (root.can_load_more
+            && !root.loading_more
+            && root.pagination-armed
+            && mail-list-scroll.viewport-height + mail-list-scroll.viewport-y
+                - mail-list-scroll.visible-height <= root.pagination-prefetch-distance) {
+            root.pagination-armed = false;
+            root.pagination-request-row-count = root.pagination-row-count;
+            root.pagination-request-revision = root.content_revision;
+            root.pagination-request-height = root.pagination-content-height;
+            root.load_more();
+        }
+    }
+
+    function reset-pagination() {
+        root.pagination-armed = true;
+        root.pagination-request-row-count = -1;
+        root.pagination-request-revision = -1;
+        root.pagination-request-height = -1px;
+        mail-list-scroll.viewport-y = 0px;
+        pagination-check.restart();
+    }
+
+    function user-scrolled() {
+        // A completed request with no revision was an error. A fresh user
+        // gesture is the retry signal; in-flight and successful requests stay
+        // latched until their settled content height changes.
+        if (!root.loading_more
+            && !root.pagination-armed
+            && root.content_revision == root.pagination-request-revision) {
+            root.pagination-armed = true;
+        }
+        root.maybe-load-more();
+    }
+
+    changed selected_scope => {
+        root.reset-pagination();
+    }
+    changed search_query => {
+        root.reset-pagination();
+    }
+    changed search_filter => {
+        root.reset-pagination();
+    }
+    changed pagination-content-height => {
+        if (!root.pagination-armed
+            && root.content_revision != root.pagination-request-revision
+            && root.pagination-content-height != root.pagination-request-height) {
+            root.pagination-armed = true;
+        }
+        pagination-check.restart();
+    }
+    changed content_revision => {
+        if (!root.pagination-armed
+            && root.content_revision != root.pagination-request-revision
+            && (root.pagination-row-count == root.pagination-request-row-count
+                || root.pagination-content-height != root.pagination-request-height)) {
+            root.pagination-armed = true;
+        }
+        pagination-check.restart();
+    }
+    changed can_load_more => { pagination-check.restart(); }
+    changed loading_more => {
+        if (!root.loading_more) {
+            pagination-check.restart();
+        }
+    }
+    pagination-check := Timer {
+        interval: 1ms;
+        running: true;
+        triggered => {
+            self.stop();
+            root.maybe-load-more();
+        }
+    }
+
+                width: LayoutMetrics.list-pane-width;
+                vertical-stretch: 1;
+                background: root.surface;
+
+                VerticalBox {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    padding-top: 0px;
+                    padding-right: 0px;
+                    padding-bottom: 0px;
+                    padding-left: 0px;
+                    spacing: 0px;
+
+                    Rectangle {
+                        height: root.compact ? 116px : 102px;
+                        background: root.surface;
+                        VerticalBox {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: parent.height;
+                            // Center the 26px title row on the shared 27px
+                            // workspace-toolbar centerline.
+                            padding-top: root.compact ? 8px : LayoutMetrics.workspace-action-center-y - 20px;
+                            padding-right: root.compact ? 10px : 12px;
+                            padding-bottom: root.compact ? 8px : 2px;
+                            padding-left: root.compact ? 10px : 12px;
+                            spacing: 8px;
+
+                            WorkspaceTitleRow {
+                                // Match the 40px toolbar controls below.
+                                height: root.compact ? LayoutMetrics.touch-target : 40px;
+                                item-spacing: 6px;
+                                title: root.selected_scope;
+                                title-font-size: root.compact ? TypeScale.title-small : TypeScale.heading-small;
+                                title-weight: 600;
+                                show-leading: true;
+                                leading-icon: @image-url("../icons/solar-icons/sidebar-outline.svg");
+                                leading-tooltip: root.mail_sidebar_collapsed ? @tr("Show folders") : @tr("Hide folders");
+                                leading-accessible-id: "mail-folders-button";
+                                leading-ghost: true;
+                                leading-clicked => {
+                                    if (root.single-pane-navigation) {
+                                        root.open_folders();
+                                    } else {
+                                        root.mail_sidebar_collapsed = !root.mail_sidebar_collapsed;
+                                    }
+                                }
+                                Text { height: parent.height; text: root.total_count; color: root.muted-text; font-size: TypeScale.caption; vertical-alignment: center; }
+                                ToolbarIconButton {
+                                    // Preserve the primary compose action when
+                                    // the desktop sidebar (and its full-width
+                                    // New email button) is collapsed.
+                                    visible: root.single-pane-navigation || root.mail_sidebar_collapsed;
+                                    compact: root.compact;
+                                    icon: @image-url("../icons/solar-icons/add-outline.svg");
+                                    primary: true;
+                                    tooltip-text: @tr("New email");
+                                    accessible-id: "mail-compose-button";
+                                    clicked => { root.open_compose(); }
+                                }
+                            }
+
+                            HorizontalBox {
+                                height: 40px;
+                                padding-top: 0px;
+                                padding-right: 0px;
+                                padding-bottom: 0px;
+                                padding-left: 0px;
+                                spacing: 6px;
+                                search-field := Rectangle {
+                                    height: 40px;
+                                    horizontal-stretch: 1;
+                                    LineEdit {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        text: root.search_query;
+                                        placeholder-text: @tr("Search mail");
+                                        show-leading-icon: true;
+                                        leading-icon: @image-url("../icons/solar-icons/magnifier-outline.svg");
+                                        leading-icon-color: root.secondary-text;
+                                        trailing-content-width: 40px;
+                                        edited(text) => { root.search_changed(text); }
+                                    }
+                                    filter-menu := ContextMenuArea {
+                                        x: parent.width - 40px;
+                                        width: 40px;
+                                        height: 40px;
+                                        IconButton {
+                                            width: 40px;
+                                            height: 40px;
+                                            icon: @image-url("../icons/solar-icons/filter-outline.svg");
+                                            icon-color: root.search_filter == "All mail" ? root.secondary-text : root.accent;
+                                            ghost: true;
+                                            hover-background: root.muted-control-bg;
+                                            active: root.search_filter != "All mail";
+                                            active-background: root.accent-soft;
+                                            tooltip-text: @tr("Filter mail");
+                                            accessible-id: "mail-filter-button";
+                                            clicked => { filter-menu.show({ x: 0px, y: 40px }); }
+                                        }
+                                        Menu {
+                                            MenuItem { title: @tr("All mail"); activated => { root.set_search_filter("All mail"); } }
+                                            MenuItem { title: @tr("Unread"); activated => { root.set_search_filter("Unread"); } }
+                                            MenuItem { title: @tr("Starred"); activated => { root.set_search_filter("Starred"); } }
+                                            MenuItem { title: @tr("Has attachments"); activated => { root.set_search_filter("Has attachments"); } }
+                                        }
+                                    }
+                                }
+                                IconButton {
+                                    width: 40px;
+                                    height: 40px;
+                                    interactive: !root.sync_in_progress;
+                                    icon: @image-url("../icons/solar-icons/refresh-outline.svg");
+                                    icon-color: root.secondary-text;
+                                    idle-background: root.control-bg;
+                                    hover-background: root.muted-control-bg;
+                                    tooltip-text: root.sync_in_progress ? @tr("Synchronizing mail") : @tr("Reload mail");
+                                    clicked => { root.sync_mail(); }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        background: transparent;
+                        Rectangle {
+                            x: 12px;
+                            width: parent.width - 24px;
+                            height: 1px;
+                            background: root.border-subtle;
+                        }
+                    }
+
+                    Rectangle {
+                        height: 32px;
+                        background: root.surface;
+                        HorizontalBox {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: parent.height;
+                            padding-top: 4px;
+                            padding-left: 12px;
+                            padding-right: 12px;
+                            padding-bottom: 4px;
+                            Text {
+                                height: 24px;
+                                horizontal-stretch: 1;
+                                text: root.list_status;
+                                color: root.muted-text;
+                                font-size: TypeScale.caption;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: root.surface;
+
+                        mail-list-scroll := ListView {
+                            x: 12px;
+                            y: 0px;
+                            width: parent.width - 16px;
+                            height: parent.height;
+                            horizontal-scrollbar-policy: always-off;
+                            mouse-drag-pan-enabled: root.compact;
+                            accessible-label: root.selected_scope;
+                            accessible-item-count: root.emails.length;
+                            scrolled => { root.user-scrolled(); }
+
+                            for row[index] in root.emails : Rectangle {
+                                width: mail-list-scroll.visible-width;
+                                height: root.dense ? 44px : 96px;
+                                border-radius: 6px;
+                                clip: true;
+                                background: row.selected ? root.selected-row : root.surface;
+                                accessible-role: list-item;
+                                accessible-label: @tr("{}, {}", row.sender, row.subject == "" ? @tr("(No subject)") : row.subject);
+                                accessible-id: "mail-row-" + row.id;
+                                accessible-item-index: index;
+                                accessible-item-selectable: true;
+                                accessible-item-selected: row.selected;
+                                accessible-action-default => { root.select_email(row.id); }
+
+                                Avatar {
+                                    visible: root.show-avatars;
+                                    x: 14px;
+                                    y: root.dense ? 8px : 12px;
+                                    size: root.dense ? 28px : 38px;
+                                    source: root.dense ? row.favicon_small : row.favicon;
+                                    has-source: row.has_favicon;
+                                    fallback: row.initials;
+                                    image-fit: contain;
+                                    background-color: row.has_favicon ? #ffffff : (row.selected ? root.avatar-selected-bg : root.avatar-bg);
+                                    foreground-color: row.selected ? root.accent : root.secondary-text;
+                                    avatar-border-width: row.has_favicon ? 1px : 0px;
+                                    avatar-border-color: root.border;
+                                }
+
+                                Rectangle {
+                                    x: root.show-avatars ? (root.dense ? 52px : 64px) : 14px;
+                                    y: root.dense ? 0px : 8px;
+                                    // Leave 24px on the right: 12px row
+                                    // padding plus the overlaid 8px scrollbar.
+                                    width: max(0px, parent.width - self.x - 24px);
+                                    height: root.dense ? 44px : 80px;
+
+                                    sender-time := Text {
+                                        x: parent.width - 72px;
+                                        y: 0px;
+                                        width: 72px;
+                                        height: root.dense ? 44px : 22px;
+                                        text: row.time;
+                                        color: root.muted-text;
+                                        font-size: TypeScale.caption;
+                                        overflow: elide;
+                                        horizontal-alignment: right;
+                                        vertical-alignment: center;
+                                    }
+                                    sender-title := Text {
+                                        x: 0px;
+                                        y: 0px;
+                                        width: root.dense ? min(170px, max(0px, parent.width - 190px)) : max(0px, parent.width - 94px);
+                                        height: root.dense ? 44px : 22px;
+                                        text: row.sender;
+                                        color: root.heading;
+                                        font-size: root.dense ? TypeScale.body : TypeScale.body-large;
+                                        font-weight: row.unread ? 700 : 500;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    Rectangle {
+                                        visible: row.unread;
+                                        x: root.dense
+                                            ? min(sender-title.preferred-width + 6px, sender-title.width - 9px)
+                                            : min(sender-title.preferred-width + 6px, sender-time.x - 11px);
+                                        y: root.dense ? 18px : 8px;
+                                        width: 7px;
+                                        height: 7px;
+                                        border-radius: 4px;
+                                        background: root.accent;
+                                    }
+                                    subject-label := Text {
+                                        x: root.dense ? min(190px, sender-time.x) : 0px;
+                                        y: root.dense ? 0px : 27px;
+                                        width: root.dense ? min(260px, max(0px, sender-time.x - self.x - 56px)) : parent.width;
+                                        height: root.dense ? 44px : 22px;
+                                        text: row.subject == "" ? @tr("(No subject)") : row.subject;
+                                        color: root.body-text;
+                                        font-size: TypeScale.body;
+                                        font-weight: row.unread ? 700 : 500;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    account-label := Text {
+                                        visible: !root.dense;
+                                        x: parent.width - 88px;
+                                        y: 54px;
+                                        width: 88px;
+                                        height: 20px;
+                                        text: row.account;
+                                        color: root.muted-text;
+                                        font-size: TypeScale.caption;
+                                        overflow: elide;
+                                        horizontal-alignment: right;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        x: root.dense ? subject-label.x + subject-label.width + 12px : 0px;
+                                        y: root.dense ? 0px : 54px;
+                                        width: root.dense ? max(0px, sender-time.x - self.x - 12px) : max(0px, parent.width - 98px);
+                                        height: root.dense ? 44px : 20px;
+                                        text: row.preview;
+                                        color: root.faint-text;
+                                        font-size: TypeScale.secondary;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                // Select on pointer-down rather than waiting for
+                                // `clicked` (pointer-up). A long-running sync can
+                                // replace the row model between those two events;
+                                // in that case the old TouchArea never receives
+                                // the release and the click appears to be lost.
+                                row-context := ContextMenuArea {
+                                    width: parent.width;
+                                    height: parent.height;
+
+                                    row-hit := TouchArea {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        mouse-cursor: pointer;
+                                        pointer-event(event) => {
+                                            if (event.kind == PointerEventKind.down) {
+                                                if (event.button == PointerEventButton.left) {
+                                                    root.select_email(row.id);
+                                                } else if (event.button == PointerEventButton.right) {
+                                                    row-context.show({ x: row-hit.mouse-x, y: row-hit.mouse-y });
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Menu {
+                                        MenuItem { title: row.starred ? @tr("Remove star") : @tr("Star message"); activated => { root.message_action_for_email(row.id, row.starred ? "unstar" : "star"); } }
+                                        MenuItem { title: row.unread ? @tr("Mark as read") : @tr("Mark as unread"); activated => { root.message_action_for_email(row.id, row.unread ? "mark_read" : "mark_unread"); } }
+                                        MenuItem { title: @tr("Archive"); activated => { root.message_action_for_email(row.id, "archive"); } }
+                                        MenuItem { title: @tr("Move to spam"); activated => { root.message_action_for_email(row.id, "spam"); } }
+                                        MenuItem { title: @tr("Move to trash"); activated => { root.message_action_for_email(row.id, "trash"); } }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.emails.length == 0 : Rectangle {
+                            x: 12px;
+                            y: 0px;
+                            width: parent.width - 16px;
+                            height: min(parent.height, 120px);
+                            background: root.surface;
+                            VerticalBox {
+                                padding-top: 28px;
+                                padding-left: 20px;
+                                spacing: 4px;
+                                Text { text: root.loading ? @tr("Opening your mailbox…") : @tr("Nothing here"); color: root.heading; font-size: TypeScale.subtitle; font-weight: 700; }
+                                if !root.loading : Text { text: @tr("Try another folder or search term."); color: root.muted-text; font-size: TypeScale.secondary; }
+                            }
+                        }
+                    }
+
+                }
+}

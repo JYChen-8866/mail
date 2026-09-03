@@ -1,0 +1,479 @@
+import { HorizontalBox, ScrollView } from "std-widgets.slint";
+import { ComposeAttachment } from "../models.slint";
+import { Button } from "button.slint";
+import { IconButton } from "controls.slint";
+import { TypeScale } from "../typography.slint";
+
+export component ComposerToolbar inherits Rectangle {
+    in property <bool> compact: false;
+    in property <color> accent-background;
+    in property <color> accent-color;
+    in property <color> control-hover-color;
+    in property <color> muted-color;
+    in property <color> raised-color;
+    in property <color> secondary-color;
+    in property <color> subtle-border-color;
+    in property <bool> bold-active: false;
+    in property <bool> italic-active: false;
+    in property <bool> underline-active: false;
+    in property <bool> strike-active: false;
+    in property <bool> code-active: false;
+    in property <bool> link-active: false;
+    in property <bool> can-link: false;
+    callback apply-format(string);
+    callback undo();
+    callback redo();
+
+    height: 44px;
+    background: root.raised-color;
+    border-width: 1px;
+    border-color: root.subtle-border-color;
+
+    toolbar-scroll := ScrollView {
+        x: 8px;
+        y: 6px;
+        width: parent.width - 16px;
+        height: 32px;
+        viewport-width: max(self.visible-width, toolbar-row.preferred-width);
+        viewport-height: self.visible-height;
+        // A native horizontal scrollbar consumes part of this 32px viewport
+        // and clips the buttons. Compact toolbars remain pannable by touch.
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: always-off;
+        mouse-drag-pan-enabled: root.compact;
+
+        toolbar-row := HorizontalLayout {
+            height: 32px;
+            spacing: 2px;
+
+            IconButton { icon: @image-url("../icons/phosphor/text-b.svg"); icon-size: 18px; icon-color: root.bold-active ? root.accent-color : root.secondary-color; active: root.bold-active; hover-background: root.control-hover-color; active-background: root.accent-background; tooltip-text: @tr("Bold · Ctrl+B"); clicked => { root.apply-format("bold"); } }
+            IconButton { icon: @image-url("../icons/phosphor/text-italic.svg"); icon-size: 18px; icon-color: root.italic-active ? root.accent-color : root.secondary-color; active: root.italic-active; hover-background: root.control-hover-color; active-background: root.accent-background; tooltip-text: @tr("Italic · Ctrl+I"); clicked => { root.apply-format("italic"); } }
+            IconButton { icon: @image-url("../icons/phosphor/text-underline.svg"); icon-size: 18px; icon-color: root.underline-active ? root.accent-color : root.secondary-color; active: root.underline-active; hover-background: root.control-hover-color; active-background: root.accent-background; tooltip-text: @tr("Underline · Ctrl+U"); clicked => { root.apply-format("underline"); } }
+            IconButton { icon: @image-url("../icons/phosphor/text-strikethrough.svg"); icon-size: 18px; icon-color: root.strike-active ? root.accent-color : root.secondary-color; active: root.strike-active; hover-background: root.control-hover-color; active-background: root.accent-background; tooltip-text: @tr("Strikethrough"); clicked => { root.apply-format("strike"); } }
+
+            Rectangle { width: 1px; height: 18px; background: root.subtle-border-color; }
+
+            IconButton { icon: @image-url("../icons/phosphor/list-bullets.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Bulleted list"); clicked => { root.apply-format("bullet"); } }
+            IconButton { icon: @image-url("../icons/phosphor/list-numbers.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Numbered list"); clicked => { root.apply-format("number"); } }
+            IconButton { icon: @image-url("../icons/phosphor/quotes.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Quote"); clicked => { root.apply-format("quote"); } }
+            IconButton { icon: @image-url("../icons/phosphor/code.svg"); icon-size: 18px; icon-color: root.code-active ? root.accent-color : root.secondary-color; active: root.code-active; hover-background: root.control-hover-color; active-background: root.accent-background; tooltip-text: @tr("Inline code"); clicked => { root.apply-format("code"); } }
+            IconButton { icon: @image-url("../icons/phosphor/link.svg"); icon-size: 18px; icon-color: root.link-active ? root.accent-color : root.secondary-color; active: root.link-active; active-background: root.accent-background; interactive: root.can-link; hover-background: root.control-hover-color; tooltip-text: root.can-link ? @tr("Add or edit link") : @tr("Select text to add a link"); clicked => { root.apply-format("link"); } }
+
+            Rectangle { horizontal-stretch: 1; }
+
+            IconButton { icon: @image-url("../icons/solar-icons/undo-left-outline.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Undo · Ctrl+Z"); clicked => { root.undo(); } }
+            IconButton { icon: @image-url("../icons/solar-icons/undo-right-outline.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Redo · Ctrl+Shift+Z"); clicked => { root.redo(); } }
+        }
+    }
+}
+
+export component ComposerAttachments inherits Rectangle {
+    in property <bool> compact: false;
+    in property <[ComposeAttachment]> attachments: [];
+    in property <color> accent-color;
+    in property <color> background-color;
+    in property <color> body-color;
+    in property <color> control-hover-color;
+    in property <color> muted-color;
+    in property <color> raised-color;
+    in property <color> subtle-border-color;
+    callback remove-attachment(int);
+
+            visible: root.attachments.length > 0;
+            height: root.attachments.length > 0 ? 62px : 0px;
+            background: root.raised-color;
+            border-width: 1px;
+            border-color: root.subtle-border-color;
+
+            attachments-scroll := ScrollView {
+                x: 10px;
+                y: 8px;
+                width: parent.width - 20px;
+                height: 46px;
+                viewport-width: max(self.visible-width, attachment-row.preferred-width);
+                viewport-height: self.visible-height;
+                horizontal-scrollbar-policy: as-needed;
+                vertical-scrollbar-policy: always-off;
+                mouse-drag-pan-enabled: root.compact;
+
+                attachment-row := HorizontalBox {
+                    height: 38px;
+                    spacing: 7px;
+
+                    for attachment[index] in root.attachments : Rectangle {
+                        width: 194px;
+                        height: 36px;
+                        border-radius: 7px;
+                        border-width: 1px;
+                        border-color: root.subtle-border-color;
+                        background: root.background-color;
+
+                        Image {
+                            x: 9px;
+                            y: 10px;
+                            width: 16px;
+                            height: 16px;
+                            source: @image-url("../icons/solar-icons/document-add-bold.svg");
+                            colorize: root.accent-color;
+                            image-fit: contain;
+                            accessible-role: none;
+                        }
+
+                        Text {
+                            x: 32px;
+                            y: 4px;
+                            width: parent.width - 64px;
+                            height: 16px;
+                            text: attachment.name;
+                            color: root.body-color;
+                            font-size: TypeScale.caption;
+                            font-weight: 600;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            x: 32px;
+                            y: 19px;
+                            width: parent.width - 64px;
+                            height: 13px;
+                            text: attachment.detail;
+                            color: root.muted-color;
+                            font-size: TypeScale.caption;
+                            overflow: elide;
+                        }
+
+                        IconButton {
+                            x: parent.width - 29px;
+                            y: 4px;
+                            width: 28px;
+                            height: 28px;
+                            icon: @image-url("../icons/solar-icons/close-outline.svg");
+                            icon-size: 12px;
+                            icon-color: root.muted-color;
+                            hover-background: root.control-hover-color;
+                            tooltip-text: @tr("Remove attachment");
+                            clicked => { root.remove-attachment(index); }
+                        }
+                    }
+                }
+            }
+}
+
+export component ComposerNotice inherits Rectangle {
+    in property <string> notice: "";
+    in property <bool> notice-is-error: false;
+    in property <color> accent-background;
+    in property <color> accent-color;
+
+            visible: root.notice != "";
+            height: root.notice == "" ? 0px : 24px;
+            background: root.notice-is-error ? #d73a4920 : root.accent-background;
+
+            Text {
+                x: 14px;
+                width: parent.width - 28px;
+                height: parent.height;
+                text: root.notice;
+                color: root.notice-is-error ? #d73a49 : root.accent-color;
+                font-size: TypeScale.caption;
+                font-weight: 600;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+}
+
+export component ComposerFooter inherits Rectangle {
+    in property <bool> compact: false;
+    in property <bool> attachment-picker-supported: true;
+    in property <string> attachment-summary: "";
+    in property <bool> can-send: false;
+    in property <bool> has-content: false;
+    in property <color> control-hover-color;
+    in property <color> muted-color;
+    in property <color> raised-color;
+    in property <color> secondary-color;
+    in property <color> subtle-border-color;
+    callback submit(bool);
+    callback pick-attachments();
+    callback request-close();
+
+            height: 54px;
+            background: root.raised-color;
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: 1px;
+                background: root.subtle-border-color;
+            }
+
+            Button {
+                x: root.compact ? 8px : 12px;
+                y: 10px;
+                width: root.compact ? 96px : 106px;
+                height: 34px;
+                text: @tr("Send");
+                icon: @image-url("../icons/solar-icons/plane-bold.svg");
+                has-icon: true;
+                primary: true;
+                enabled: root.can-send;
+                clicked => { root.submit(true); }
+            }
+
+            IconButton {
+                visible: root.attachment-picker-supported;
+                x: root.compact ? 108px : 126px;
+                y: root.compact ? 5px : 11px;
+                width: root.compact ? 44px : 32px;
+                height: root.compact ? 44px : 32px;
+                icon: @image-url("../icons/solar-icons/paperclip-outline.svg");
+                icon-size: 17px;
+                icon-color: root.secondary-color;
+                hover-background: root.control-hover-color;
+                tooltip-text: @tr("Attach files");
+                clicked => { root.pick-attachments(); }
+            }
+
+            Text {
+                visible: !root.compact && root.attachment-picker-supported;
+                x: 166px;
+                width: max(0px, parent.width - 410px);
+                height: parent.height;
+                text: root.attachment-summary == "" ? @tr("Attach files") : root.attachment-summary;
+                color: root.muted-color;
+                font-size: TypeScale.caption;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            Button {
+                x: parent.width - (root.compact ? 158px : 202px);
+                y: 11px;
+                width: root.compact ? 104px : 112px;
+                height: 32px;
+                text: @tr("Save draft");
+                enabled: root.has-content;
+                clicked => { root.submit(false); }
+            }
+
+            IconButton {
+                x: parent.width - (root.compact ? 48px : 78px);
+                y: root.compact ? 5px : 11px;
+                width: root.compact ? 44px : 32px;
+                height: root.compact ? 44px : 32px;
+                icon: @image-url("../icons/solar-icons/trash-bin-trash-bold.svg");
+                icon-size: 16px;
+                icon-color: root.secondary-color;
+                hover-background: root.control-hover-color;
+                tooltip-text: @tr("Discard");
+                clicked => { root.request-close(); }
+            }
+
+}
+
+export component LinkEditor inherits Rectangle {
+    in property <bool> compact: false;
+    in property <bool> open: false;
+    in-out property <string> url: "";
+    in property <bool> has-existing-link: false;
+    in property <color> background-color;
+    in property <color> body-color;
+    in property <color> frame-border-color;
+    in property <color> muted-color;
+    in property <color> title-color;
+    in property <color> accent-color;
+    callback cancel();
+    callback apply(string);
+    callback remove();
+
+    visible: root.open;
+    background: #00000066;
+    z: 6000;
+    TouchArea { }
+
+    changed open => {
+        if (root.open) {
+            link-input.focus();
+            link-input.select-all();
+        }
+    }
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        width: root.compact ? min(380px, parent.width - 32px) : 420px;
+        height: 202px;
+        border-radius: 10px;
+        border-width: 1px;
+        border-color: root.frame-border-color;
+        background: root.background-color;
+
+        Text {
+            x: 20px;
+            y: 18px;
+            width: parent.width - 40px;
+            height: 24px;
+            text: root.has-existing-link ? @tr("Edit link") : @tr("Add link");
+            color: root.title-color;
+            font-size: TypeScale.heading-small;
+            font-weight: 700;
+        }
+
+        Text {
+            x: 20px;
+            y: 48px;
+            width: parent.width - 40px;
+            height: 20px;
+            text: @tr("The selected text will open this address.");
+            color: root.muted-color;
+            font-size: TypeScale.secondary;
+        }
+
+        Rectangle {
+            x: 20px;
+            y: 78px;
+            width: parent.width - 40px;
+            height: 38px;
+            border-radius: 7px;
+            border-width: 1px;
+            border-color: link-input.has-focus ? root.accent-color : root.frame-border-color;
+            background: root.background-color;
+
+            Text {
+                x: 11px;
+                width: parent.width - 22px;
+                height: parent.height;
+                visible: root.url == "";
+                text: @tr("https://example.com");
+                color: root.muted-color;
+                font-size: TypeScale.body;
+                vertical-alignment: center;
+            }
+
+            link-input := TextInput {
+                x: 11px;
+                width: parent.width - 22px;
+                height: parent.height;
+                text <=> root.url;
+                color: root.body-color;
+                selection-background-color: root.accent-color;
+                selection-foreground-color: white;
+                font-size: TypeScale.body;
+                single-line: true;
+                vertical-alignment: center;
+                key-pressed(event) => {
+                    if (event.text == Key.Escape) {
+                        root.cancel();
+                        return accept;
+                    }
+                    if (event.text == Key.Return && root.url != "") {
+                        root.apply(root.url);
+                        return accept;
+                    }
+                    reject
+                }
+            }
+        }
+
+        if root.has-existing-link : Button {
+            x: 20px;
+            y: 146px;
+            width: 104px;
+            height: 34px;
+            text: @tr("Remove link");
+            clicked => { root.remove(); }
+        }
+
+        Button {
+            x: parent.width - 188px;
+            y: 146px;
+            width: 78px;
+            height: 34px;
+            text: @tr("Cancel");
+            clicked => { root.cancel(); }
+        }
+
+        Button {
+            x: parent.width - 102px;
+            y: 146px;
+            width: 82px;
+            height: 34px;
+            text: @tr("Apply");
+            primary: true;
+            enabled: root.url != "";
+            clicked => { root.apply(root.url); }
+        }
+    }
+}
+
+export component DiscardConfirmation inherits Rectangle {
+    in property <bool> compact: false;
+    in property <bool> open: false;
+    in property <color> background-color;
+    in property <color> frame-border-color;
+    in property <color> secondary-color;
+    in property <color> title-color;
+    callback keep();
+    callback discard();
+
+    visible: root.open;
+    background: #00000066;
+    z: 5000;
+    TouchArea { }
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - 164px) / 2;
+            width: root.compact ? min(360px, parent.width - 32px) : 360px;
+            height: 164px;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: root.frame-border-color;
+            background: root.background-color;
+
+            Text {
+                x: 20px;
+                y: 20px;
+                width: parent.width - 40px;
+                height: 24px;
+                text: @tr("Discard this draft?");
+                color: root.title-color;
+                font-size: TypeScale.heading-small;
+                font-weight: 700;
+            }
+
+            Text {
+                x: 20px;
+                y: 51px;
+                width: parent.width - 40px;
+                height: 38px;
+                text: @tr("The message and its attachments will be removed from this composer.");
+                color: root.secondary-color;
+                font-size: TypeScale.secondary;
+                wrap: word-wrap;
+            }
+
+            Button {
+                x: parent.width - 192px;
+                y: 108px;
+                width: 78px;
+                height: 34px;
+                text: @tr("Keep");
+                clicked => { root.keep(); }
+            }
+
+            Button {
+                x: parent.width - 106px;
+                y: 108px;
+                width: 86px;
+                height: 34px;
+                text: @tr("Discard");
+                primary: true;
+                clicked => {
+                    root.keep();
+                    root.discard();
+                }
+            }
+        }
+}

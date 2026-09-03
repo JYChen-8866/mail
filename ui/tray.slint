@@ -1,0 +1,27 @@
+// Keep the non-visual tray in its own Slint compilation unit. app.slint embeds
+// the UI font; compiling a SystemTrayIcon alongside it makes Slint 1.17 create
+// a window adapter just to register that font, which leaks an empty 800x600
+// "Slint Window" into Linux task switchers.
+export component FlectarTray inherits SystemTrayIcon {
+    in-out property <bool> enabled: false;
+    visible: root.enabled;
+    icon: @image-url("../resources/app-icon/flectar-mail-masked.png");
+    title: @tr("Flectar Mail");
+    tooltip: @tr("Flectar Mail");
+
+    callback show_window();
+    callback quit_app();
+
+    clicked => { root.show_window(); }
+
+    Menu {
+        MenuItem {
+            title: @tr("Show Flectar Mail");
+            activated => { root.show_window(); }
+        }
+        MenuItem {
+            title: @tr("Quit");
+            activated => { root.quit_app(); }
+        }
+    }
+}

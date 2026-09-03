@@ -1,0 +1,95 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { Button } from "../components/button.slint";
+import { LineEdit } from "../components/controls.slint";
+import { TypeScale } from "../typography.slint";
+
+export component CalendarEventDialog inherits Rectangle {
+    in property <bool> compact: false;
+    in property <bool> dark-mode: false;
+    in property <color> accent;
+    in property <color> border;
+    in property <color> border-subtle;
+    in property <color> control-bg;
+    in property <color> muted-text;
+    in property <color> surface;
+    in property <color> title-color;
+    in-out property <bool> calendar_editor_open: false;
+    in property <bool> calendar_event_editing: false;
+    in-out property <string> calendar_event_title: "";
+    in-out property <string> calendar_event_date: "";
+    in-out property <string> calendar_event_time: "09:00";
+    in-out property <string> calendar_event_duration: "60";
+    in-out property <int> calendar_event_color: 0;
+    callback calendar-save-event(string, string, string, string, int);
+
+        Rectangle {
+            visible: root.calendar_editor_open;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: root.dark-mode ? #00000088 : #20212455;
+            z: 500;
+            TouchArea { clicked => { root.calendar_editor_open = false; } }
+
+            Rectangle {
+                accessible-role: groupbox;
+                accessible-label: root.calendar_event_editing ? @tr("Edit calendar event") : @tr("New calendar event");
+                x: root.compact ? 0px : (parent.width - 420px) / 2;
+                y: root.compact ? 0px : (parent.height - 390px) / 2;
+                width: root.compact ? parent.width : 420px;
+                height: root.compact ? parent.height : 390px;
+                border-radius: root.compact ? 0px : 12px;
+                border-width: root.compact ? 0px : 1px;
+                border-color: root.border;
+                background: root.surface;
+                TouchArea { }
+
+                Text { x: 24px; y: 22px; width: parent.width - 48px; height: 28px; text: root.calendar_event_editing ? @tr("Edit event") : @tr("New event"); color: root.title-color; font-size: TypeScale.title-small; font-weight: 700; }
+                Text { x: 24px; y: 66px; width: parent.width - 48px; height: 18px; text: @tr("TITLE"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                LineEdit { x: 24px; y: 88px; width: parent.width - 48px; height: root.compact ? 44px : 38px; text: root.calendar_event_title; placeholder-text: @tr("Event title"); edited(value) => { root.calendar_event_title = value; } }
+                Text { x: 24px; y: 142px; width: (parent.width - 56px) / 2; height: 18px; text: @tr("DATE"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                Text { x: parent.width / 2 + 4px; y: 142px; width: (parent.width - 56px) / 2; height: 18px; text: @tr("START TIME"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                LineEdit { x: 24px; y: 164px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_date; placeholder-text: @tr("YYYY-MM-DD"); edited(value) => { root.calendar_event_date = value; } }
+                LineEdit { x: parent.width / 2 + 4px; y: 164px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_time; placeholder-text: @tr("09:00"); edited(value) => { root.calendar_event_time = value; } }
+                Text { x: 24px; y: 218px; width: parent.width - 48px; height: 18px; text: @tr("DURATION (MINUTES)"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                LineEdit { x: 24px; y: 240px; width: (parent.width - 56px) / 2; height: root.compact ? 44px : 38px; text: root.calendar_event_duration; placeholder-text: @tr("60"); input-type: InputType.number; edited(value) => { root.calendar_event_duration = value; } }
+                Text { x: parent.width / 2 + 4px; y: 218px; width: (parent.width - 56px) / 2; height: 18px; text: @tr("CALENDAR"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; }
+                HorizontalBox {
+                    x: parent.width / 2 + 4px;
+                    y: 240px;
+                    width: (parent.width - 56px) / 2;
+                    height: root.compact ? 44px : 38px;
+                    spacing: 8px;
+                    for color in [0, 1, 2, 3] : Rectangle {
+                        width: max(30px, (parent.width - 24px) / 4);
+                        height: root.compact ? 44px : 36px;
+                        border-radius: 8px;
+                        border-width: root.calendar_event_color == color ? 2px : 0px;
+                        border-color: root.accent;
+                        background: root.control-bg;
+                        Rectangle { x: 10px; y: 10px; width: 16px; height: 16px; border-radius: 5px; background: color == 0 ? #3478f6 : color == 1 ? #8b5cf6 : color == 2 ? #e87924 : #26a269; }
+                        TouchArea {
+                            accessible-role: radio-button;
+                            accessible-label: color == 0 ? @tr("Blue calendar") : color == 1 ? @tr("Purple calendar") : color == 2 ? @tr("Orange calendar") : @tr("Green calendar");
+                            accessible-checked: root.calendar_event_color == color;
+                            clicked => { root.calendar_event_color = color; }
+                            mouse-cursor: pointer;
+                        }
+                    }
+                }
+                Rectangle { x: 0px; y: root.compact ? parent.height - 72px : 304px; width: parent.width; height: 1px; background: root.border-subtle; }
+                Button { x: parent.width - 196px; y: root.compact ? parent.height - 60px : 328px; width: 82px; height: root.compact ? 44px : 40px; text: @tr("Cancel"); clicked => { root.calendar_editor_open = false; } }
+                Button {
+                    x: parent.width - 106px;
+                    y: root.compact ? parent.height - 60px : 328px;
+                    width: 82px;
+                    height: root.compact ? 44px : 40px;
+                    text: root.calendar_event_editing ? @tr("Save") : @tr("Create");
+                    primary: true;
+                    enabled: root.calendar_event_title != "";
+                    clicked => { root.calendar-save-event(root.calendar_event_title, root.calendar_event_date, root.calendar_event_time, root.calendar_event_duration, root.calendar_event_color); }
+                }
+            }
+        }
+}

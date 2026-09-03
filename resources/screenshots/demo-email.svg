@@ -1,0 +1,28 @@
+<svg viewBox="0 0 720 720" xmlns="http://www.w3.org/2000/svg">
+  <rect width="720" height="720" fill="#f4f7fb"/>
+  <rect x="54" y="42" width="612" height="636" rx="18" fill="#ffffff" stroke="#dfe5ec"/>
+  <rect x="54" y="42" width="612" height="112" rx="18" fill="#f38020"/>
+  <rect x="54" y="132" width="612" height="22" fill="#f38020"/>
+  <circle cx="112" cy="98" r="28" fill="#ffffff"/>
+  <text x="112" y="105" fill="#f38020" font-family="Arial, sans-serif" font-size="17" font-weight="700" text-anchor="middle">CF</text>
+  <text x="156" y="91" fill="#ffffff" font-family="Arial, sans-serif" font-size="15" font-weight="700" letter-spacing="1.4">CLOUDFLARE</text>
+  <text x="156" y="119" fill="#fff4eb" font-family="Arial, sans-serif" font-size="14">Weekly traffic report</text>
+  <text x="92" y="205" fill="#20242b" font-family="Arial, sans-serif" font-size="28" font-weight="700">Your week on the web</text>
+  <text x="92" y="237" fill="#66717e" font-family="Arial, sans-serif" font-size="15">Here’s how flectar.com performed over the last seven days.</text>
+  <rect x="92" y="278" width="164" height="112" rx="12" fill="#fff5ec"/>
+  <rect x="278" y="278" width="164" height="112" rx="12" fill="#f2f6ff"/>
+  <rect x="464" y="278" width="164" height="112" rx="12" fill="#eefaf5"/>
+  <text x="112" y="315" fill="#7f8790" font-family="Arial, sans-serif" font-size="13">REQUESTS</text>
+  <text x="112" y="357" fill="#20242b" font-family="Arial, sans-serif" font-size="27" font-weight="700">1.24M</text>
+  <text x="298" y="315" fill="#7f8790" font-family="Arial, sans-serif" font-size="13">BANDWIDTH</text>
+  <text x="298" y="357" fill="#20242b" font-family="Arial, sans-serif" font-size="27" font-weight="700">38.6 GB</text>
+  <text x="484" y="315" fill="#7f8790" font-family="Arial, sans-serif" font-size="13">THREATS BLOCKED</text>
+  <text x="484" y="357" fill="#20242b" font-family="Arial, sans-serif" font-size="27" font-weight="700">2,849</text>
+  <text x="92" y="443" fill="#20242b" font-family="Arial, sans-serif" font-size="19" font-weight="700">Traffic was up 18%</text>
+  <text x="92" y="476" fill="#66717e" font-family="Arial, sans-serif" font-size="15">Your busiest hour was Tuesday at 14:00 UTC, with most</text>
+  <text x="92" y="500" fill="#66717e" font-family="Arial, sans-serif" font-size="15">visitors arriving from Spain, the United States, and Germany.</text>
+  <rect x="92" y="545" width="190" height="48" rx="8" fill="#f38020"/>
+  <text x="187" y="576" fill="#ffffff" font-family="Arial, sans-serif" font-size="15" font-weight="700" text-anchor="middle">View analytics</text>
+  <line x1="92" y1="626" x2="628" y2="626" stroke="#e5e9ee"/>
+  <text x="92" y="653" fill="#929aa4" font-family="Arial, sans-serif" font-size="12">This fictional message is used only for Flectar Mail screenshots.</text>
+</svg>

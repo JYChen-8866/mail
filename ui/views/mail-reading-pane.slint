@@ -1,0 +1,699 @@
+import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
+import { EmailLink, EmailTile } from "../models.slint";
+import { Avatar } from "../components/avatar.slint";
+import { Button } from "../components/button.slint";
+import { IconButton, TextEdit, ToolbarIconButton } from "../components/controls.slint";
+import { EmailLinkContextArea } from "../components/email-link-context-area.slint";
+import { RenderingInfoDialog } from "../dialogs/rendering-info-dialog.slint";
+import { TypeScale } from "../typography.slint";
+import { LayoutMetrics } from "../design-system.slint";
+
+export component MailReadingPane inherits Rectangle {
+    in property <bool> compact: false;
+    in property <bool> full-width: false;
+    in property <bool> show-avatars: true;
+    // The title wrap width comes from the containing window, not this pane's
+    // preferred width, which avoids a HorizontalBox measurement cycle.
+    in property <length> window-width;
+    in property <[EmailTile]> email_tiles: [];
+    in property <[EmailLink]> email_links: [];
+    in property <string> selected_sender: "";
+    in property <string> selected_address: "";
+    in property <string> selected_subject: "";
+    in property <string> selected_time: "";
+    in property <string> selected_to: "";
+    in property <string> selected_label: "";
+    in property <string> selected_initials: "?";
+    in property <image> selected_favicon;
+    in property <bool> selected_has_favicon: false;
+    in property <string> selected_plain_text: "";
+    in property <string> selected_source: "";
+    in property <string> selected_text: "";
+    in property <bool> has_selection: false;
+    in property <string> clipboard_request: "";
+    in property <int> clipboard_request_id: 0;
+    in property <bool> has_selected: true;
+    in property <bool> selected_starred: false;
+    in property <bool> selected_unread: false;
+    in property <bool> selected_is_draft: false;
+    in property <string> selected_sender_verification: "";
+    in property <bool> remote-images-blocked: false;
+    in property <bool> print_supported: true;
+    in-out property <bool> text_mode: false;
+    in-out property <bool> source_mode: false;
+    in-out property <bool> rendering_info_open: false;
+    in-out property <float> email-content-aspect: 900 / 520;
+    in-out property <length> email-scroll-y: 0px;
+    out property <length> email-viewport-width: email-surface.width;
+    out property <length> email-viewport-height: email-surface.height;
+    in property <color> accent;
+    in property <color> accent-soft;
+    in property <color> border;
+    in property <color> border-subtle;
+    in property <color> control-bg;
+    in property <color> heading;
+    in property <color> muted-control-bg;
+    in property <color> muted-text;
+    in property <color> secondary-text;
+    in property <color> surface;
+    in property <color> surface-raised;
+    in property <color> title-color;
+    callback message_action(string);
+    callback compose_message_action(string);
+    callback close_preview();
+    callback print_message();
+    callback open_message_in_browser();
+    callback open_email_link(string);
+    callback copy_email_status(string);
+    callback email-pointer-event(float, float, string, bool, bool, bool, bool);
+    callback email-scroll(float, float);
+    callback email-key-event(string, bool, bool, bool, bool, bool, bool);
+    callback select-email-text();
+    callback load-remote-images-for-message();
+
+    private property <string> display-subject: root.selected_subject == "" ? @tr("(No subject)") : root.selected_subject;
+
+    changed clipboard-request-id => {
+        if root.clipboard-request-id > 0 {
+            clipboard-source.text = root.clipboard_request;
+            clipboard-source.select-all();
+            clipboard-source.copy();
+        }
+    }
+
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                background: root.surface-raised;
+
+                VerticalBox {
+                    padding: 0px;
+                    spacing: 0px;
+
+                    Rectangle {
+                        // Desktop actions share the product rail/sidebar/list
+                        // centerline at y=32. Compact actions use the same
+                        // centered 44px touch geometry as the other pages.
+                        height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
+                        background: root.surface-raised;
+                        HorizontalBox {
+                            padding-top: 0px;
+                            padding-left: root.compact ? 8px : 14px;
+                            padding-right: root.compact ? 8px : 14px;
+                            padding-bottom: 0px;
+                            spacing: 6px;
+                            cross-axis-alignment: center;
+                            ToolbarIconButton {
+                                visible: root.has_selected;
+                                compact: root.compact;
+                                icon: root.compact ? @image-url("../icons/solar-icons/arrow-left-outline.svg") : @image-url("../icons/solar-icons/close-outline.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Close message preview");
+                                accessible-id: "message-back-button";
+                                clicked => { root.close_preview(); }
+                            }
+                            if !root.compact : Text { text: root.selected_label; color: root.secondary-text; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
+                            Rectangle { horizontal-stretch: 1; }
+                            ToolbarIconButton {
+                                visible: !root.selected_is_draft;
+                                interactive: root.has_selected;
+                                compact: root.compact;
+                                icon: @image-url("../icons/solar-icons/archive-outline.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Archive message");
+                                clicked => { root.message_action("archive"); }
+                            }
+                            ToolbarIconButton {
+                                visible: !root.selected_is_draft;
+                                interactive: root.has_selected;
+                                compact: root.compact;
+                                icon: root.selected_starred ? @image-url("../icons/solar-icons/star-bold.svg") : @image-url("../icons/solar-icons/star-outline.svg");
+                                icon-color: root.selected_starred ? root.accent : root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                active-background: root.accent-soft;
+                                active: root.selected_starred;
+                                tooltip-text: root.selected_starred ? @tr("Remove star") : @tr("Star message");
+                                clicked => { root.message_action(root.selected_starred ? "unstar" : "star"); }
+                            }
+                            ToolbarIconButton {
+                                visible: !root.selected_is_draft;
+                                interactive: root.has_selected;
+                                compact: root.compact;
+                                icon: root.selected_unread ? @image-url("../icons/solar-icons/letter-unread-bold.svg") : @image-url("../icons/solar-icons/letter-unread-outline.svg");
+                                icon-color: root.selected_unread ? root.accent : root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                active-background: root.accent-soft;
+                                active: root.selected_unread;
+                                tooltip-text: root.selected_unread ? @tr("Mark as read") : @tr("Mark as unread");
+                                clicked => { root.message_action(root.selected_unread ? "mark_read" : "mark_unread"); }
+                            }
+                            if !root.compact && !root.selected_is_draft : ToolbarIconButton {
+                                interactive: root.has_selected;
+                                icon: @image-url("../icons/solar-icons/danger-triangle-outline.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Move to spam");
+                                clicked => { root.message_action("spam"); }
+                            }
+                            ToolbarIconButton {
+                                interactive: root.has_selected;
+                                compact: root.compact;
+                                icon: @image-url("../icons/solar-icons/trash-bin-trash-outline.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Move to trash");
+                                clicked => { root.message_action("trash"); }
+                            }
+                            more-menu := ContextMenuArea {
+                                width: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
+                                height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
+                                enabled: root.has_selected;
+                                ToolbarIconButton {
+                                    compact: root.compact;
+                                    width: parent.width;
+                                    height: parent.height;
+                                    icon: @image-url("../icons/solar-icons/menu-dots-bold.svg");
+                                    icon-color: root.secondary-text;
+                                    idle-background: root.control-bg;
+                                    hover-background: root.muted-control-bg;
+                                    tooltip-text: @tr("More message actions");
+                                    clicked => { more-menu.show({ x: 0px, y: parent.height }); }
+                                }
+                                Menu {
+                                    if root.selected_is_draft : MenuItem { title: @tr("Continue editing"); activated => { root.compose_message_action("edit_draft"); } }
+                                    if !root.selected_is_draft : MenuItem { title: @tr("Reply"); activated => { root.compose_message_action("reply"); } }
+                                    if !root.selected_is_draft : MenuItem { title: @tr("Reply all"); activated => { root.compose_message_action("reply_all"); } }
+                                    if !root.selected_is_draft : MenuItem { title: @tr("Forward"); activated => { root.compose_message_action("forward"); } }
+                                    if root.print_supported && !root.selected_is_draft : MenuItem { title: @tr("Print message"); activated => { root.print_message(); } }
+                                    if !root.selected_is_draft : MenuItem { title: @tr("Open in browser"); activated => { root.open_message_in_browser(); } }
+                                    MenuItem { title: @tr("About email rendering"); activated => { root.rendering_info_open = true; } }
+                                    MenuItem {
+                                        title: root.source_mode ? @tr("Show rendered message") : @tr("Show source");
+                                        activated => {
+                                            root.source_mode = !root.source_mode;
+                                            if root.source_mode { root.text_mode = false; }
+                                        }
+                                    }
+                                    MenuItem {
+                                        title: root.text_mode ? @tr("Show rendered message") : @tr("View plain text");
+                                        activated => {
+                                            root.text_mode = !root.text_mode;
+                                            if root.text_mode { root.source_mode = false; }
+                                        }
+                                    }
+                                    if !root.selected_is_draft : MenuItem { title: root.selected_unread ? @tr("Mark as read") : @tr("Mark as unread"); activated => { root.message_action(root.selected_unread ? "mark_read" : "mark_unread"); } }
+                                    if !root.selected_is_draft : MenuItem { title: @tr("Archive"); activated => { root.message_action("archive"); } }
+                                    if !root.selected_is_draft : MenuItem { title: @tr("Move to spam"); activated => { root.message_action("spam"); } }
+                                    MenuItem { title: @tr("Move to trash"); activated => { root.message_action("trash"); } }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: 1px; background: root.border; }
+
+                    VerticalBox {
+                        vertical-stretch: 1;
+                        padding-top: root.compact ? 14px : 20px;
+                        padding-right: root.compact ? 12px : 24px;
+                        padding-bottom: root.compact ? 10px : 14px;
+                        padding-left: root.compact ? 12px : 24px;
+                        spacing: 0px;
+
+                        Text {
+                            // The two navigation panes and separators occupy
+                            // 622px; the reading pane adds 24px padding on
+                            // each side. Referencing the window avoids a
+                            // preferred-size loop while still giving wrapping
+                            // a real width to measure against.
+                            width: root.compact ? max(0px, root.window-width - 24px)
+                                : root.full-width ? max(0px, root.window-width - 48px)
+                                : max(0px, root.window-width - 734px);
+                            height: min(3, max(1, ceil(root.display-subject.character-count * 10.5px / max(1px, self.width)))) * (self.font-metrics.ascent - self.font-metrics.descent);
+                            text: root.display-subject;
+                            color: root.title-color;
+                            font-size: root.compact ? TypeScale.title : TypeScale.display;
+                            font-weight: 600;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle { height: 14px; }
+
+                        HorizontalBox {
+                            min-height: 44px;
+                            preferred-height: 44px;
+                            max-height: 44px;
+                            spacing: 11px;
+                            cross-axis-alignment: center;
+                            Avatar {
+                                visible: root.show-avatars;
+                                size: 38px;
+                                source: root.selected_favicon;
+                                has-source: root.selected_has_favicon;
+                                fallback: root.selected_initials;
+                                image-fit: contain;
+                                background-color: root.selected_has_favicon ? #ffffff : root.accent-soft;
+                                foreground-color: root.accent;
+                                avatar-border-width: root.selected_has_favicon ? 1px : 0px;
+                                avatar-border-color: root.border;
+                            }
+                            VerticalBox {
+                                min-height: 44px;
+                                preferred-height: 44px;
+                                max-height: 44px;
+                                spacing: 0px;
+                                Rectangle {
+                                    min-height: 24px;
+                                    preferred-height: 24px;
+                                    max-height: 24px;
+                                    sender-name := Text {
+                                        x: 0px;
+                                        y: 0px;
+                                        width: max(0px, parent.width - (root.selected_sender_verification != "" ? 26px : 0px));
+                                        height: parent.height;
+                                        text: root.selected_sender;
+                                        color: root.heading;
+                                        font-size: TypeScale.body-large;
+                                        font-weight: 600;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    if root.selected_sender_verification != "" : Image {
+                                        x: min(sender-name.preferred-width + 8px, parent.width - 18px);
+                                        y: 3px;
+                                        width: 18px;
+                                        height: 18px;
+                                        source: @image-url("../icons/solar-icons/verified-check-bold.svg");
+                                        colorize: root.accent;
+                                        image-fit: contain;
+                                        accessible-label: root.selected_sender_verification == "brand"
+                                            ? @tr("Verified brand with BIMI authority evidence")
+                                            : root.selected_sender_verification == "bimi"
+                                                ? @tr("BIMI-authenticated sender")
+                                                : root.selected_sender_verification == "microsoft"
+                                                    ? @tr("Sender authenticated by Microsoft")
+                                                    : @tr("Sender domain authenticated with DMARC and DKIM");
+                                    }
+                                }
+                                Text {
+                                    min-height: 20px;
+                                    preferred-height: 20px;
+                                    max-height: 20px;
+                                    text: root.selected_address + " · " + @tr("to {} · {}", root.selected_to, root.selected_time);
+                                    color: root.secondary-text;
+                                    font-size: TypeScale.secondary;
+                                    overflow: elide;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        Rectangle { min-height: 16px; preferred-height: 16px; max-height: 16px; }
+                        Rectangle { height: 1px; background: root.border-subtle; }
+                        Rectangle { height: 12px; }
+
+                        email-surface := Rectangle {
+                            horizontal-stretch: 1;
+                            vertical-stretch: 1;
+                            background: root.surface;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: root.border-subtle;
+                            clip: true;
+
+                                email-scroll := ScrollView {
+                                    width: parent.width;
+                                    height: parent.height;
+                                    viewport-width: email-surface.width;
+                                    viewport-height: max(parent.height, email-surface.width * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px));
+                                    viewport-y <=> root.email-scroll-y;
+                                    horizontal-scrollbar-policy: always-off;
+                                    mouse-drag-pan-enabled: root.compact;
+                                    scrolled => {
+                                        root.email-scroll(-self.viewport-y / 1px, self.visible-height / 1px);
+                                    }
+
+                                // This area supplies the normal right-click
+                                // menu for the rendered mail. Link hit areas
+                                // below add the link-specific native actions.
+                                email-context := ContextMenuArea {
+                                    width: email-surface.width;
+                                    height: max(email-surface.height, email-surface.width * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px));
+                                    // Keep the parent enabled in plain-text
+                                    // mode as well; otherwise Slint propagates
+                                    // the disabled state into the read-only
+                                    // TextEdit and its text cannot be selected.
+                                    enabled: root.has_selected;
+
+                                    if root.remote-images-blocked && !root.text_mode && !root.source_mode : Rectangle {
+                                        x: 12px;
+                                        y: 12px;
+                                        width: parent.width - 24px;
+                                        height: 36px;
+                                        background: root.control-bg;
+                                        border-radius: 6px;
+                                        border-width: 1px;
+                                        border-color: root.border;
+
+                                        HorizontalBox {
+                                            padding-left: 10px;
+                                            padding-right: 8px;
+                                            spacing: 10px;
+                                            Text {
+                                                text: @tr("Remote images were blocked to protect your privacy.");
+                                                color: root.secondary-text;
+                                                font-size: TypeScale.secondary;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            Button {
+                                                height: 26px;
+                                                text: @tr("Load images");
+                                                clicked => { root.load-remote-images-for-message(); }
+                                            }
+                                        }
+                                    }
+
+                                    for tile in root.email_tiles : Image {
+                                        source: tile.image;
+                                        x: 0px;
+                                        y: tile.y * email-surface.width + (root.remote-images-blocked ? 60px : 0px);
+                                        width: parent.width;
+                                        height: tile.height * email-surface.width;
+                                        visible: !root.text_mode && !root.source_mode;
+                                        vertical-alignment: top;
+                                        image-fit: fill;
+                                        // One message is rasterized into many
+                                        // tiles. Expose its text once on the
+                                        // focus surface instead of announcing
+                                        // every implementation tile as an image.
+                                        accessible-role: none;
+                                    }
+
+                                    // The tiles remain the visual renderer, but
+                                    // input is forwarded into the retained Blitz
+                                    // document so its native text-selection state
+                                    // and selection highlights stay authoritative.
+                                    email-focus := FocusScope {
+                                        y: root.remote-images-blocked ? 60px : 0px;
+                                        width: parent.width;
+                                        height: email-surface.width * root.email-content-aspect;
+                                        enabled: root.has_selected && !root.text_mode && !root.source_mode;
+                                        focus-on-click: true;
+                                        focus-on-tab-navigation: false;
+                                        accessible-role: text;
+                                        accessible-label: root.selected_plain_text;
+
+                                        email-input := TouchArea {
+                                            width: parent.width;
+                                            height: parent.height;
+                                            enabled: parent.enabled;
+                                            mouse-cursor: text;
+
+                                            pointer-event(event) => {
+                                                if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                                                    email-context.show({ x: email-input.mouse-x, y: email-input.mouse-y });
+                                                } else if (event.button == PointerEventButton.left || event.kind == PointerEventKind.move || event.kind == PointerEventKind.cancel) {
+                                                    if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                                                        email-focus.focus();
+                                                    }
+                                                    root.email-pointer-event(
+                                                        email-input.mouse-x / 1px,
+                                                        email-input.mouse-y / 1px,
+                                                        event.kind == PointerEventKind.down ? "down" : event.kind == PointerEventKind.move ? "move" : event.kind == PointerEventKind.up ? "up" : "cancel",
+                                                        event.modifiers.control,
+                                                        event.modifiers.shift,
+                                                        event.modifiers.alt,
+                                                        event.modifiers.meta
+                                                    );
+                                                }
+                                            }
+                                        }
+
+                                        key-pressed(event) => {
+                                            root.email-key-event(event.text, true, event.repeat, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta);
+                                            accept
+                                        }
+
+                                        key-released(event) => {
+                                            root.email-key-event(event.text, false, event.repeat, event.modifiers.control, event.modifiers.shift, event.modifiers.alt, event.modifiers.meta);
+                                            accept
+                                        }
+                                    }
+
+                                    if root.text_mode : TextEdit {
+                                        x: 16px;
+                                        y: 54px;
+                                        width: parent.width - 32px;
+                                        height: parent.height - 70px;
+                                        text: root.selected_plain_text;
+                                        read-only: true;
+                                        font-size: TypeScale.body-large;
+                                    }
+
+                                    if root.text_mode : Button {
+                                        x: 16px;
+                                        y: 16px;
+                                        height: 30px;
+                                        text: @tr("Show rendered email");
+                                        clicked => { root.text_mode = false; }
+                                    }
+
+                                    source-editor := TextEdit {
+                                        visible: root.source_mode;
+                                        x: 16px;
+                                        y: 64px;
+                                        width: parent.width - 32px;
+                                        height: parent.height - 80px;
+                                        text: root.selected_source;
+                                        read-only: true;
+                                        font-size: TypeScale.secondary;
+                                    }
+
+                                    if root.source_mode : HorizontalBox {
+                                        x: 16px;
+                                        y: 14px;
+                                        width: parent.width - 32px;
+                                        height: 36px;
+                                        spacing: 8px;
+                                        cross-axis-alignment: center;
+                                        Text {
+                                            text: @tr("Copy this HTML into your GitHub rendering issue.");
+                                            color: root.secondary-text;
+                                            font-size: TypeScale.secondary;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                        Button {
+                                            height: 30px;
+                                            text: @tr("Copy source");
+                                            clicked => {
+                                                source-editor.select-all();
+                                                source-editor.copy();
+                                                root.copy_email_status("Copied HTML source");
+                                            }
+                                        }
+                                        Button {
+                                            height: 30px;
+                                            text: @tr("Show email");
+                                            clicked => { root.source_mode = false; }
+                                        }
+                                    }
+
+                                    Menu {
+                                        MenuItem {
+                                            title: @tr("Copy selected text");
+                                            enabled: root.has_selection;
+                                            activated => {
+                                                clipboard-source.text = root.selected_text;
+                                                clipboard-source.select-all();
+                                                clipboard-source.copy();
+                                                root.copy_email_status("Copied selected text");
+                                            }
+                                        }
+                                        MenuItem {
+                                            title: @tr("Copy all email text");
+                                            enabled: root.selected_plain_text != "";
+                                            activated => {
+                                                clipboard-source.text = root.selected_plain_text;
+                                                clipboard-source.select-all();
+                                                clipboard-source.copy();
+                                                root.copy_email_status("Copied email text");
+                                            }
+                                        }
+                                        MenuItem {
+                                            title: @tr("Select all email text");
+                                            enabled: root.selected_plain_text != "";
+                                            activated => { root.select-email-text(); }
+                                        }
+                                    }
+                                }
+
+                                // Keep link menus as siblings above the
+                                // document-wide menu area. ContextMenuArea is
+                                // an input item, so nesting it under another
+                                // context area would let the parent consume a
+                                // right-click before the link can inspect it.
+                                for link in root.email_links : EmailLinkContextArea {
+                                    x: link.x * email-surface.width;
+                                    y: link.y * email-surface.width + (root.remote-images-blocked ? 60px : 0px);
+                                    width: link.width * email-surface.width;
+                                    height: link.height * email-surface.width;
+                                    enabled: !root.text_mode && !root.source_mode;
+                                    url: link.url;
+                                    open-link => { root.open_email_link(link.url); }
+                                    copy-link => {
+                                        clipboard-source.text = link.url;
+                                        clipboard-source.select-all();
+                                        clipboard-source.copy();
+                                        root.copy_email_status("Copied link");
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle { height: root.compact ? 10px : 12px; }
+
+                        // Keep the three essential conversation actions visible
+                        // instead of hiding them behind the overflow menu.
+                        HorizontalBox {
+                            height: root.compact ? 40px : 32px;
+                            spacing: 6px;
+                            alignment: start;
+                            Button {
+                                visible: !root.selected_is_draft;
+                                height: parent.height;
+                                border-radius: parent.height / 2;
+                                text: @tr("Reply");
+                                enabled: root.has_selected;
+                                clicked => { root.compose_message_action("reply"); }
+                            }
+                            Button {
+                                visible: !root.selected_is_draft;
+                                height: parent.height;
+                                border-radius: parent.height / 2;
+                                text: @tr("Reply all");
+                                enabled: root.has_selected;
+                                clicked => { root.compose_message_action("reply_all"); }
+                            }
+                            Button {
+                                visible: !root.selected_is_draft;
+                                height: parent.height;
+                                border-radius: parent.height / 2;
+                                text: @tr("Forward");
+                                enabled: root.has_selected;
+                                clicked => { root.compose_message_action("forward"); }
+                            }
+                            Button {
+                                visible: root.selected_is_draft;
+                                height: parent.height;
+                                border-radius: parent.height / 2;
+                                text: @tr("Continue editing");
+                                has-icon: true;
+                                icon: @image-url("../icons/solar-icons/pen-new-square-bold.svg");
+                                primary: true;
+                                enabled: root.has_selected;
+                                clicked => { root.compose_message_action("edit_draft"); }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            if !root.compact && !root.selected_is_draft : Button {
+                                height: parent.height;
+                                border-radius: parent.height / 2;
+                                text: @tr("Open in browser");
+                                enabled: root.has_selected;
+                                clicked => { root.open_message_in_browser(); }
+                            }
+                            if !root.compact && !root.selected_is_draft : IconButton {
+                                width: parent.height;
+                                height: parent.height;
+                                border-radius: parent.height / 2;
+                                border-width: 1px;
+                                border-color: root.border;
+                                icon-size: 16px;
+                                icon: @image-url("../icons/solar-icons/info-circle-bold.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.surface;
+                                hover-background: root.control-bg;
+                                active-background: root.muted-control-bg;
+                                interactive: root.has_selected;
+                                tooltip-text: @tr("About email rendering");
+                                tooltip-above: true;
+                                clicked => { root.rendering_info_open = true; }
+                            }
+                        }
+
+                        // Keep the rounded controls clear of the window edge.
+                        // A constrained spacer cannot be squeezed away when
+                        // the message viewport consumes the remaining height.
+                        Rectangle {
+                            min-height: root.compact ? 10px : 12px;
+                            preferred-height: root.compact ? 10px : 12px;
+                            max-height: root.compact ? 10px : 12px;
+                        }
+
+                    }
+                }
+
+                // Keep a tiny primitive text input as the platform clipboard
+                // bridge. Selection itself lives in the retained Blitz DOM;
+                // this input is never used to display the email body.
+                clipboard-source := TextInput {
+                    x: -10000px;
+                    y: -10000px;
+                    width: 1px;
+                    height: 1px;
+                    visible: true;
+                    enabled: true;
+                    read-only: true;
+                    text: "";
+                }
+
+                Rectangle {
+                    visible: !root.has_selected;
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    background: root.surface-raised;
+                    VerticalBox {
+                        padding-top: 170px;
+                        padding-left: 32px;
+                        spacing: 6px;
+                        Text { text: @tr("No message selected"); color: root.heading; font-size: TypeScale.heading-large; font-weight: 700; }
+                        Text { text: @tr("Choose an email to read it here."); color: root.muted-text; font-size: TypeScale.secondary; }
+                    }
+                }
+
+                RenderingInfoDialog {
+                    open <=> root.rendering_info_open;
+                    compact: root.compact;
+                    x: 0px;
+                    y: 0px;
+                    width: root.width;
+                    height: root.height;
+                    accent: root.accent;
+                    accent-soft: root.accent-soft;
+                    border: root.border;
+                    body-color: root.heading;
+                    muted-color: root.muted-text;
+                    surface: root.surface-raised;
+                    title-color: root.title-color;
+                    copy-source => {
+                        clipboard-source.text = root.selected_source;
+                        clipboard-source.select-all();
+                        clipboard-source.copy();
+                        root.copy_email_status("Copied HTML source");
+                    }
+                    report-issue => {
+                        root.open_email_link("https://github.com/flectar/mail/issues/new?title=Email%20rendering%20issue&body=%23%23%20What%20looked%20wrong%3F%0A%0A%23%23%20Email%20HTML%20source%0A%3C!--%20Remove%20private%20information%20before%20pasting.%20--%3E%0A");
+                    }
+                }
+}

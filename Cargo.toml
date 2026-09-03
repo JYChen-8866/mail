@@ -1,0 +1,151 @@
+[workspace]
+members = ["crates/flectar-mail-core"]
+exclude = ["crates/blitz-dom", "crates/blitz-paint"]
+resolver = "3"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "io-util", "fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+
+[patch.crates-io]
+blitz-dom = { path = "crates/blitz-dom" }
+
+[package]
+name = "flectar-mail"
+version = "0.1.0"
+description = "A native email client built with Rust, Slint, and Blitz"
+license = "AGPL-3.0-only"
+repository = "https://github.com/flectar/mail"
+homepage = "https://flectar.com"
+publish = false
+edition = "2024"
+rust-version = "1.92"
+build = "build.rs"
+autobins = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "flectar-mail"
+path = "src/desktop.rs"
+
+[features]
+# The default AppImage is deliberately software-rendered. Creating a WGPU
+# device makes several Linux drivers reserve hundreds of MiB before the user
+# has opened a message. GPU rendering remains available as an explicit build.
+default = ["remote-content"]
+gpu-renderer = [
+    "dep:anyrender_vello",
+    "dep:vello",
+    "slint/renderer-femtovg-wgpu",
+    "slint/unstable-wgpu-29",
+]
+# Normal builds include the bounded image-loader capability, but the persisted
+# runtime setting remains off by default. `--no-default-features` omits all
+# remote body-image loading code for a capability-free minimal build.
+remote-content = []
+# Slint's documented iOS backend uses Skia. Keep it opt-in so desktop builds
+# retain the smaller software-rendered dependency set.
+ios = ["slint/renderer-skia"]
+
+[dependencies]
+anyrender = "0.11"
+anyrender_vello = { version = "0.11", optional = true }
+anyrender_vello_cpu = "0.14"
+blitz-dom = "=0.3.0-beta.1"
+blitz-html = "=0.3.0-beta.1"
+blitz-paint = { path = "crates/blitz-paint" }
+blitz-traits = "=0.3.0-beta.1"
+data-url = "0.3"
+parley = "0.10"
+pulldown-cmark = "0.13.4"
+vello = { version = "0.9", optional = true }
+# This native shell currently exposes keyword/FTS search, not local semantic
+# search. Do not link Candle, tokenizers, or Hugging Face into every AppImage.
+flectar-mail-core = { path = "crates/flectar-mail-core", default-features = false }
+# Slint 1.17 uses fontique on Linux. Enable its dlopen path so the application
+# also builds on distributions whose Fontconfig headers expose a newer ABI.
+fontique = { version = "0.10", features = ["fontconfig-dlopen"] }
+dirs = "6"
+chrono.workspace = true
+cosmic-text = { version = "0.19", default-features = false, features = ["std", "swash"] }
+image = { version = "0.25", default-features = false, features = ["gif", "ico", "jpeg", "png", "webp"] }
+keyboard-types = "0.7"
+libc = "0.2"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2"] }
+sha2 = "0.10"
+serde.workspace = true
+serde_json.workspace = true
+sys-locale = "0.3"
+tempfile = "3"
+# The application paints its own controls on Slint's winit backend. Desktop
+# Linux enables both Wayland and X11; Apple and Windows use their native winit
+# integrations. Android supplies its dedicated activity backend separately.
+# The `gpu-renderer` feature adds WGPU and exposes its device/queue to Vello.
+slint = { version = "1.17", default-features = false, features = [
+    "std",
+    "renderer-software",
+    "system-tray",
+    "compat-1-2",
+] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "fs"] }
+tracing.workspace = true
+url = "2"
+webbrowser = "1.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+slint = { version = "1.17", default-features = false, features = ["backend-winit"] }
+
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "ios"))'.dependencies]
+slint = { version = "1.17", default-features = false, features = ["backend-winit"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+rfd = { version = "0.16", default-features = false, features = ["tokio", "xdg-portal"] }
+
+[package.metadata.appimage]
+icon = "resources/app-icon/flectar-mail-masked-512.png"
+desktop_entry = "resources/com.flectar.mail.desktop"
+auto_link = true
+auto_link_exclude_list = [
+    "ld-linux*.so*",
+    "libc.so*",
+    "libdl.so*",
+    "libgcc_s.so*",
+    "libm.so*",
+    "libpthread.so*",
+    "librt.so*",
+    "libstdc++.so*",
+]
+
+# `fontique` deliberately enables a feature on Slint's transitive font stack;
+# `slint-build` is consumed by build.rs. Neither appears as a normal Rust path
+# in the application crate, so dependency scanners need these explicit uses.
+[package.metadata.cargo-machete]
+ignored = ["fontique", "slint-build"]
+
+[build-dependencies]
+slint-build = "1.17"
+winresource = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+# Full DWARF for this renderer/protocol dependency graph consumes many GiB and
+# makes every integration-test binary expensive to link. Line tables preserve
+# useful file/line backtraces while keeping development builds substantially
+# smaller and less memory-hungry.
+[profile.dev]
+debug = 1
+
+[profile.test]
+debug = 1

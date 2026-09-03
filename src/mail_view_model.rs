@@ -1,0 +1,953 @@
+//! Mail list/detail projection, paging, avatars, and rendered-email bridge.
+
+use super::*;
+
+pub(super) fn refresh_from_source(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+    preserve_loaded_rows: bool,
+) -> Result<(), String> {
+    let (using_core, core, scope, query) = {
+        let state = state.borrow();
+        (
+            state.using_core,
+            state.core.clone(),
+            state.scope.clone(),
+            state.query.clone(),
+        )
+    };
+
+    if using_core {
+        let core = core.ok_or_else(|| "core backend was not initialized".to_owned())?;
+        // Folder navigation is latency-sensitive. Sidebar totals are already
+        // cached in InboxState and are refreshed after sync on a worker; do not
+        // recount every mailbox while the Slint event loop is handling a click.
+        let page = runtime.block_on(core.load_page(
+            &scope,
+            &query,
+            None,
+            PAGE_SIZE as i64,
+            false,
+        ))?;
+        if preserve_loaded_rows {
+            apply_background_mail_page(app, state, runtime, page);
+            return Ok(());
+        }
+        let mut state = state.borrow_mut();
+        state.messages = page.messages;
+        // Exact folder totals arrive on the independent metadata worker. Use
+        // the bounded page size immediately instead of blocking navigation on
+        // a potentially large COUNT query.
+        state.total_count = state.messages.len();
+        state.next_cursor = page.next_cursor;
+    }
+
+    render_current(app, state, runtime)
+}
+
+/// Apply a worker-loaded first page without rebuilding the selected email
+/// document. Historical Gmail pages can then make newly indexed mail visible
+/// while scrolling, selection, and the retained Blitz renderer stay on the UI
+/// thread and avoid repeated body preparation.
+fn merge_refreshed_mail_head(
+    current: &[MailMessage],
+    refreshed: Vec<MailMessage>,
+    next_cursor: Option<ThreadCursor>,
+) -> (Vec<MailMessage>, bool) {
+    if next_cursor.is_none() || current.len() <= PAGE_SIZE {
+        return (refreshed, false);
+    }
+
+    // The oldest refreshed row is normally present in the retained model.
+    // Everything after it is the already-loaded tail and can stay untouched.
+    // Looking for the oldest shared row also handles new messages inserted at
+    // the head without requiring a growing refresh query.
+    let tail_start = refreshed
+        .iter()
+        .rev()
+        .find_map(|fresh| current.iter().position(|old| old.id == fresh.id))
+        .map(|index| index + 1)
+        .unwrap_or_else(|| PAGE_SIZE.min(current.len()));
+    let refreshed_len = refreshed.len();
+    let mut merged = refreshed;
+    let mut known = merged.iter().map(|message| message.id).collect::<HashSet<_>>();
+    merged.extend(
+        current[tail_start..]
+            .iter()
+            .filter(|message| known.insert(message.id))
+            .cloned(),
+    );
+    let retained_tail = merged.len() > refreshed_len;
+    (merged, retained_tail)
+}
+
+pub(super) fn apply_background_mail_page(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+    page: mail::MailPage,
+) {
+    let mail::MailPage {
+        mut messages,
+        mailboxes,
+        next_cursor,
+        ..
+    } = page;
+    let selection_removed = {
+        let mut state = state.borrow_mut();
+        let selected_detail = state.selected_id.and_then(|selected_id| {
+            state
+                .messages
+                .iter()
+                .find(|message| message.id == selected_id && !message.body_pending)
+                .cloned()
+        });
+        if let Some(selected_detail) = selected_detail
+            && let Some(summary) = messages
+                .iter_mut()
+                .find(|message| message.id == selected_detail.id)
+        {
+            summary.html = selected_detail.html;
+            summary.to = selected_detail.to;
+            summary.body_pending = false;
+        }
+
+        let old_counts = state
+            .mailboxes
+            .iter()
+            .map(|mailbox| (mailbox.scope.clone(), mailbox.count.clone()))
+            .collect::<HashMap<_, _>>();
+        let mut mailboxes = mailboxes;
+        for mailbox in &mut mailboxes {
+            if let Some(count) = old_counts.get(&mailbox.scope) {
+                mailbox.count.clone_from(count);
+            }
+        }
+
+        let old_next_cursor = state.next_cursor;
+        let (merged, retained_tail) =
+            merge_refreshed_mail_head(&state.messages, messages, next_cursor);
+        state.messages = merged;
+        state.mailboxes = mailboxes;
+        state.next_cursor = if retained_tail {
+            old_next_cursor
+        } else {
+            next_cursor
+        };
+        state.total_count = state.total_count.max(state.messages.len());
+        let removed = state
+            .selected_id
+            .is_some_and(|selected_id| !state.messages.iter().any(|row| row.id == selected_id));
+        if removed {
+            state.selected_id = None;
+            state.preview_closed = false;
+        }
+        removed
+    };
+
+    if selection_removed {
+        if let Err(error) = render_current(app, state, runtime) {
+            app.set_render_status(UiMessage::detail(
+                "Background mail refresh failed: {}",
+                error,
+            ));
+        }
+    } else {
+        refresh_rows_only(app, state, runtime);
+        refresh_list_metadata(app, state);
+    }
+    // A live refresh may change both the list height and its continuation
+    // cursor. Let the one-shot viewport check prefetch again when necessary.
+    app.set_mail_list_revision(app.get_mail_list_revision().wrapping_add(1));
+}
+
+pub(super) fn append_mail_page(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+    cursor: ThreadCursor,
+    page: mail::MailPage,
+) -> Result<(), String> {
+    if page.next_cursor == Some(cursor) {
+        return Err("mail pagination cursor did not advance".to_owned());
+    }
+
+    let mut state_mut = state.borrow_mut();
+    let mut known_ids = state_mut
+        .messages
+        .iter()
+        .map(|message| message.id)
+        .collect::<HashSet<_>>();
+    state_mut.messages.extend(
+        page.messages
+            .into_iter()
+            .filter(|message| known_ids.insert(message.id)),
+    );
+    state_mut.next_cursor = page.next_cursor;
+    drop(state_mut);
+
+    // Pagination changes only the list. Re-preparing the selected HTML body
+    // here discarded already decoded images and launched another batch of
+    // remote requests; opening one of the newly appended rows could then sit
+    // behind those stale requests. Keep the retained Blitz document intact.
+    refresh_rows_only(app, state, runtime);
+    refresh_list_metadata(app, state);
+    app.set_mail_list_revision(app.get_mail_list_revision().wrapping_add(1));
+    Ok(())
+}
+
+pub(super) fn select_message(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+    id: i32,
+) -> Result<Option<(CoreMailSource, MailMessage)>, String> {
+    let (core, row) = {
+        let state = state.borrow();
+        (
+            state.core.clone(),
+            state.messages.iter().find(|email| email.id == id).cloned(),
+        )
+    };
+    let Some(row) = row else {
+        return Ok(None);
+    };
+
+    {
+        let mut state = state.borrow_mut();
+        state.selected_id = Some(id);
+        state.preview_closed = false;
+    }
+    render_current(app, state, runtime)?;
+
+    Ok(core
+        .filter(|_| row.thread_id.is_some() && row.body_pending)
+        .map(|core| (core, row)))
+}
+
+pub(super) fn render_current(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+) -> Result<(), String> {
+    let (email_renderer, use_wgpu) = {
+        let state = state.borrow();
+        (Rc::clone(&state.email_renderer), state.use_wgpu)
+    };
+    let (
+        messages,
+        page,
+        scope,
+        query,
+        selected_id,
+        preview_closed,
+        mailboxes,
+        unified_mailboxes,
+        next_cursor,
+        using_core,
+        favicon_icons,
+        profile_avatar_images,
+        search_filter,
+        total_count,
+        inbox_count,
+    ) = {
+        let state = state.borrow();
+        (
+            filtered_messages(
+                &state.messages,
+                &state.scope,
+                &state.query,
+                &state.search_filter,
+            ),
+            state.page,
+            state.scope.clone(),
+            state.query.clone(),
+            state.selected_id,
+            state.preview_closed,
+            state.mailboxes.clone(),
+            state.unified_mailboxes.clone(),
+            state.next_cursor,
+            state.using_core,
+            state.favicon_icons.clone(),
+            state.profile_avatar_images.clone(),
+            state.search_filter.clone(),
+            state.total_count,
+            state.inbox_count,
+        )
+    };
+
+    let visible_count = if using_core {
+        messages.len()
+    } else {
+        paged_visible_count(page, messages.len())
+    };
+    let total_count = if using_core {
+        total_count
+    } else {
+        messages.len()
+    };
+    let visible = &messages[..visible_count];
+    let selected_id = if preview_closed {
+        None
+    } else {
+        selected_id
+            .filter(|id| visible.iter().any(|email| email.id == *id))
+            .or_else(|| visible.first().map(|email| email.id))
+    };
+    let selected_email =
+        selected_id.and_then(|id| visible.iter().find(|email| email.id == id).cloned());
+
+    let (selection_changed, allow_remote_images) = {
+        let mut state = state.borrow_mut();
+        let selection_changed = state.rendered_id != selected_id;
+        state.selected_id = selected_id;
+        state.rendered_id = selected_id;
+        let allow_remote_images = state.remote_images_enabled
+            || selected_id.is_some_and(|id| state.remote_images_override_id == Some(id));
+        (selection_changed, allow_remote_images)
+    };
+    if selection_changed {
+        // "View plain text" is a message action, not a global display mode.
+        app.set_text_mode(false);
+        app.set_source_mode(false);
+        app.set_rendering_info_open(false);
+    }
+
+    let email_rows = Rc::clone(&state.borrow().email_rows);
+    reconcile_model_rows(
+        &email_rows,
+        make_rows(visible, selected_id, &favicon_icons),
+        |row| row.id,
+    );
+    app.set_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
+        &mailboxes,
+        &profile_avatar_images,
+    ))));
+    app.set_account_mailboxes(ModelRc::new(VecModel::from(make_account_mailbox_rows(
+        &mailboxes,
+        &profile_avatar_images,
+    ))));
+    app.set_unified_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
+        &unified_mailboxes,
+        &profile_avatar_images,
+    ))));
+    app.set_selected_scope(scope.into());
+    app.set_search_query(query.clone().into());
+    app.set_unified_count(sidebar_badge_text(inbox_count).into());
+    app.set_total_count(total_count.to_string().into());
+    app.set_search_filter(search_filter.into());
+    app.set_list_status(list_status(
+        &query,
+        visible_count,
+        total_count,
+        using_core,
+        next_cursor.is_some(),
+    ));
+    app.set_can_load_more(if using_core {
+        next_cursor.is_some()
+    } else {
+        visible_count < messages.len()
+    });
+    app.set_has_selected(selected_email.is_some());
+    state.borrow().queue_warm_start_update();
+    schedule_favicon_fetches(app, state, runtime, visible);
+
+    if let Some(email) = selected_email {
+        apply_selected_favicon(app, favicon_icons.get(&email.domain));
+        apply_email(app, email, &email_renderer, use_wgpu, allow_remote_images)
+    } else {
+        email_renderer.borrow_mut().clear();
+        app.set_selected_sender("".into());
+        app.set_selected_address("".into());
+        app.set_selected_subject(if query.trim().is_empty() {
+            translated(app, &UiMessage::plain("No messages in this folder"))
+        } else {
+            translated(app, &UiMessage::plain("No messages match this search"))
+        });
+        app.set_selected_time("".into());
+        app.set_selected_to("".into());
+        app.set_selected_label("".into());
+        app.set_selected_is_draft(false);
+        app.set_selected_initials("?".into());
+        app.set_selected_starred(false);
+        app.set_selected_unread(false);
+        app.set_selected_sender_verification("".into());
+        apply_selected_favicon(app, None);
+        app.set_email_tiles(ModelRc::new(VecModel::default()));
+        app.set_email_scroll_y(0.0);
+        app.set_email_content_aspect(900.0 / 520.0);
+        app.set_email_links(ModelRc::new(VecModel::default()));
+        app.set_selected_plain_text("".into());
+        app.set_selected_source("".into());
+        app.set_selected_text("".into());
+        app.set_has_selection(false);
+        app.set_remote_images_blocked(false);
+        app.set_render_status(UiMessage::plain(
+            "Mail core is ready for account synchronization and message actions.",
+        ));
+        Ok(())
+    }
+}
+
+pub(super) fn filtered_messages(
+    messages: &[MailMessage],
+    scope: &str,
+    query: &str,
+    search_filter: &str,
+) -> Vec<MailMessage> {
+    let query = query.trim().to_lowercase();
+    messages
+        .iter()
+        .filter(|email| scope_matches(email, scope))
+        .filter(|email| match search_filter {
+            "Unread" => email.unread,
+            "Starred" => email.starred,
+            "Has attachments" => email.has_attachments,
+            _ => true,
+        })
+        .filter(|email| {
+            if query.is_empty() {
+                return true;
+            }
+            [
+                email.sender.as_str(),
+                email.address.as_str(),
+                email.subject.as_str(),
+                email.preview.as_str(),
+                email.account.as_str(),
+                email.folder.as_str(),
+            ]
+            .into_iter()
+            .any(|field| field.to_lowercase().contains(&query))
+        })
+        .cloned()
+        .collect()
+}
+
+pub(super) fn scope_matches(email: &MailMessage, scope: &str) -> bool {
+    if scope == "Unified Inbox" {
+        return email.folder == "Inbox";
+    }
+    if let Some(folder) = scope.strip_prefix("Unified ") {
+        return match folder {
+            "Starred" => email.starred,
+            "Sent" | "Archive" | "Spam" | "Trash" | "Drafts" => email.folder == folder,
+            _ => false,
+        };
+    }
+    if let Some((account, folder)) = scope.split_once(" / ") {
+        return email.account == account
+            && if folder == "Starred" {
+                email.starred
+            } else {
+                email.folder == folder
+            };
+    }
+    email.account == scope
+}
+
+pub(super) fn list_status(
+    query: &str,
+    visible_count: usize,
+    total_count: usize,
+    using_core: bool,
+    can_load_more: bool,
+) -> UiMessage {
+    let singular = total_count == 1;
+    match (
+        query.trim().is_empty(),
+        singular,
+        using_core && can_load_more,
+        using_core && !can_load_more,
+    ) {
+        (true, true, true, _) => UiMessage::arguments(
+            "Showing {} of {} message · more available",
+            visible_count,
+            total_count,
+        ),
+        (true, true, _, true) => UiMessage::arguments(
+            "Showing {} of {} message · current results complete",
+            visible_count,
+            total_count,
+        ),
+        (true, true, _, _) => {
+            UiMessage::arguments("Showing {} of {} message", visible_count, total_count)
+        }
+        (true, false, true, _) => UiMessage::arguments(
+            "Showing {} of {} messages · more available",
+            visible_count,
+            total_count,
+        ),
+        (true, false, _, true) => UiMessage::arguments(
+            "Showing {} of {} messages · current results complete",
+            visible_count,
+            total_count,
+        ),
+        (true, false, _, _) => {
+            UiMessage::arguments("Showing {} of {} messages", visible_count, total_count)
+        }
+        (false, true, true, _) => UiMessage::three_arguments(
+            "Showing {} of {} message matching \"{}\" · more available",
+            visible_count,
+            total_count,
+            query.trim(),
+        ),
+        (false, true, _, true) => UiMessage::three_arguments(
+            "Showing {} of {} message matching \"{}\" · current results complete",
+            visible_count,
+            total_count,
+            query.trim(),
+        ),
+        (false, true, _, _) => UiMessage::three_arguments(
+            "Showing {} of {} message matching \"{}\"",
+            visible_count,
+            total_count,
+            query.trim(),
+        ),
+        (false, false, true, _) => UiMessage::three_arguments(
+            "Showing {} of {} messages matching \"{}\" · more available",
+            visible_count,
+            total_count,
+            query.trim(),
+        ),
+        (false, false, _, true) => UiMessage::three_arguments(
+            "Showing {} of {} messages matching \"{}\" · current results complete",
+            visible_count,
+            total_count,
+            query.trim(),
+        ),
+        (false, false, _, _) => UiMessage::three_arguments(
+            "Showing {} of {} messages matching \"{}\"",
+            visible_count,
+            total_count,
+            query.trim(),
+        ),
+    }
+}
+
+pub(super) fn make_rows(
+    messages: &[MailMessage],
+    selected_id: Option<i32>,
+    favicon_icons: &HashMap<String, FaviconImages>,
+) -> Vec<EmailRow> {
+    messages
+        .iter()
+        .map(|email| {
+            let favicons = favicon_icons.get(&email.domain);
+            let favicon = favicons.map(|icons| slint_image(&icons.regular));
+            let favicon_small = favicons.map(|icons| slint_image(&icons.small));
+            EmailRow {
+                id: email.id,
+                account: email.account.clone().into(),
+                folder: email.folder.clone().into(),
+                sender: email.sender.clone().into(),
+                address: email.address.clone().into(),
+                initials: email.initials.clone().into(),
+                favicon: favicon.clone().unwrap_or_default(),
+                favicon_small: favicon_small.unwrap_or_default(),
+                has_favicon: favicon.is_some(),
+                subject: email.subject.clone().into(),
+                preview: display_preview(&email.preview).into(),
+                time: email.time.clone().into(),
+                unread: email.unread,
+                starred: email.starred,
+                has_attachments: email.has_attachments,
+                selected: Some(email.id) == selected_id,
+            }
+        })
+        .collect()
+}
+
+pub(super) fn slint_image(icon: &FaviconImage) -> Image {
+    let pixels =
+        SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&icon.pixels, icon.width, icon.height);
+    Image::from_rgba8(pixels)
+}
+
+pub(super) fn apply_selected_favicon(app: &AppWindow, icons: Option<&FaviconImages>) {
+    app.set_selected_has_favicon(icons.is_some());
+    app.set_selected_favicon(
+        icons
+            .map(|icons| slint_image(&icons.regular))
+            .unwrap_or_default(),
+    );
+}
+
+pub(super) fn refresh_rows_only(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+) {
+    let (messages, page, using_core, selected_id, preview_closed, favicon_icons) = {
+        let state = state.borrow();
+        (
+            filtered_messages(
+                &state.messages,
+                &state.scope,
+                &state.query,
+                &state.search_filter,
+            ),
+            state.page,
+            state.using_core,
+            state.selected_id,
+            state.preview_closed,
+            state.favicon_icons.clone(),
+        )
+    };
+    let visible_count = if using_core {
+        messages.len()
+    } else {
+        paged_visible_count(page, messages.len())
+    };
+    let visible = &messages[..visible_count];
+    let selected_id = if preview_closed {
+        None
+    } else {
+        selected_id
+            .filter(|id| visible.iter().any(|email| email.id == *id))
+            .or_else(|| visible.first().map(|email| email.id))
+    };
+    state.borrow_mut().selected_id = selected_id;
+    let email_rows = Rc::clone(&state.borrow().email_rows);
+    reconcile_model_rows(
+        &email_rows,
+        make_rows(visible, selected_id, &favicon_icons),
+        |row| row.id,
+    );
+    let selected_icon = selected_id
+        .and_then(|id| visible.iter().find(|email| email.id == id))
+        .and_then(|email| favicon_icons.get(&email.domain));
+    apply_selected_favicon(app, selected_icon);
+    schedule_favicon_fetches(app, state, runtime, visible);
+}
+
+pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxState>>) {
+    let (
+        messages,
+        page,
+        using_core,
+        query,
+        scope,
+        mailboxes,
+        unified_mailboxes,
+        next_cursor,
+        search_filter,
+        total_count,
+        inbox_count,
+        profile_avatar_images,
+    ) = {
+        let state = state.borrow();
+        (
+            filtered_messages(
+                &state.messages,
+                &state.scope,
+                &state.query,
+                &state.search_filter,
+            ),
+            state.page,
+            state.using_core,
+            state.query.clone(),
+            state.scope.clone(),
+            state.mailboxes.clone(),
+            state.unified_mailboxes.clone(),
+            state.next_cursor,
+            state.search_filter.clone(),
+            state.total_count,
+            state.inbox_count,
+            state.profile_avatar_images.clone(),
+        )
+    };
+    let visible_count = if using_core {
+        messages.len()
+    } else {
+        paged_visible_count(page, messages.len())
+    };
+    let total_count = if using_core {
+        total_count
+    } else {
+        messages.len()
+    };
+    let can_load_more = if using_core {
+        next_cursor.is_some()
+    } else {
+        visible_count < messages.len()
+    };
+
+    app.set_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
+        &mailboxes,
+        &profile_avatar_images,
+    ))));
+    app.set_account_mailboxes(ModelRc::new(VecModel::from(make_account_mailbox_rows(
+        &mailboxes,
+        &profile_avatar_images,
+    ))));
+    app.set_unified_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
+        &unified_mailboxes,
+        &profile_avatar_images,
+    ))));
+    app.set_selected_scope(scope.into());
+    app.set_search_query(query.clone().into());
+    app.set_unified_count(sidebar_badge_text(inbox_count).into());
+    app.set_total_count(total_count.to_string().into());
+    app.set_search_filter(search_filter.into());
+    app.set_list_status(list_status(
+        &query,
+        visible_count,
+        total_count,
+        using_core,
+        can_load_more,
+    ));
+    app.set_can_load_more(can_load_more);
+    state.borrow().queue_warm_start_update();
+}
+
+fn sidebar_badge_text(count: usize) -> String {
+    if count > 0 {
+        count.to_string()
+    } else {
+        String::new()
+    }
+}
+
+pub(super) fn schedule_favicon_fetches(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+    visible: &[MailMessage],
+) {
+    let pixel_sides = (
+        physical_pixel_side(SENDER_AVATAR_SMALL_SIDE, app.window().scale_factor()),
+        physical_pixel_side(SENDER_AVATAR_REGULAR_SIDE, app.window().scale_factor()),
+    );
+    let (loader, tx, pending_count) = {
+        let mut state = state.borrow_mut();
+        if !state.remote_images_enabled {
+            return;
+        }
+        if state.favicon_pixel_sides != pixel_sides {
+            state.favicon_pixel_sides = pixel_sides;
+            state.favicon_icons.clear();
+            state.favicon_pending.clear();
+            state.favicon_missing.clear();
+        }
+        (
+            state.favicon_loader.clone(),
+            state.favicon_tx.clone(),
+            state.favicon_pending.len(),
+        )
+    };
+    let Some(loader) = loader else {
+        return;
+    };
+    let slots = FAVICON_CONCURRENCY.saturating_sub(pending_count);
+    if slots == 0 {
+        return;
+    }
+
+    let mut to_fetch = Vec::new();
+    {
+        let mut state = state.borrow_mut();
+        let mut domains = HashSet::new();
+        for domain in visible
+            .iter()
+            .map(|email| email.domain.as_str())
+            .filter(|domain| !domain.is_empty())
+        {
+            if to_fetch.len() >= slots || !domains.insert(domain.to_owned()) {
+                continue;
+            }
+            if state.favicon_icons.contains_key(domain)
+                || state.favicon_missing.contains(domain)
+                || state.favicon_pending.contains(domain)
+            {
+                continue;
+            }
+            let domain = domain.to_owned();
+            state.favicon_pending.insert(domain.clone());
+            to_fetch.push(domain);
+        }
+    }
+
+    for domain in to_fetch {
+        let loader = loader.clone();
+        let tx = tx.clone();
+        runtime.spawn(async move {
+            let icons = loader.load(&domain, pixel_sides.0, pixel_sides.1).await;
+            let _ = tx
+                .send(FaviconUpdate {
+                    domain,
+                    pixel_sides,
+                    icons,
+                })
+                .await;
+        });
+    }
+}
+
+pub(super) fn schedule_profile_avatar_fetches(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+) {
+    let pixel_sides = (
+        physical_pixel_side(ACCOUNT_AVATAR_SMALL_SIDE, app.window().scale_factor()),
+        physical_pixel_side(ACCOUNT_AVATAR_REGULAR_SIDE, app.window().scale_factor()),
+    );
+    let (loader, tx, to_fetch) = {
+        let mut state = state.borrow_mut();
+        if state.profile_avatar_pixel_sides != pixel_sides {
+            state.profile_avatar_pixel_sides = pixel_sides;
+            state.profile_avatar_images.clear();
+            state.profile_avatar_pending.clear();
+            state.profile_avatar_missing.clear();
+        }
+        let Some(loader) = state.profile_avatar_loader.clone() else {
+            return;
+        };
+        let slots = FAVICON_CONCURRENCY.saturating_sub(state.profile_avatar_pending.len());
+        let candidates = state
+            .connected_accounts
+            .iter()
+            .filter_map(|account| {
+                account
+                    .avatar_url
+                    .as_ref()
+                    .map(|source_url| (account.id, source_url.clone()))
+            })
+            .collect::<Vec<_>>();
+        let mut to_fetch = Vec::new();
+        for (account_id, source_url) in candidates {
+            if to_fetch.len() >= slots {
+                break;
+            }
+            if state.profile_avatar_images.contains_key(&account_id)
+                || state.profile_avatar_pending.contains(&account_id)
+                || state.profile_avatar_missing.contains(&account_id)
+            {
+                continue;
+            }
+            state.profile_avatar_pending.insert(account_id);
+            to_fetch.push((account_id, source_url));
+        }
+        (loader, state.profile_avatar_tx.clone(), to_fetch)
+    };
+
+    for (account_id, source_url) in to_fetch {
+        let loader = loader.clone();
+        let tx = tx.clone();
+        runtime.spawn(async move {
+            let images = loader.load(&source_url, pixel_sides.0, pixel_sides.1).await;
+            let _ = tx
+                .send(ProfileAvatarUpdate {
+                    account_id,
+                    source_url,
+                    pixel_sides,
+                    images,
+                })
+                .await;
+        });
+    }
+}
+
+pub(super) fn make_mailbox_rows(
+    mailboxes: &[MailboxEntry],
+    avatars: &HashMap<i64, ProfileAvatarImages>,
+) -> Vec<MailboxRow> {
+    mailboxes
+        .iter()
+        .map(|mailbox| {
+            let avatar = mailbox
+                .is_account
+                .then(|| avatars.get(&mailbox.account_id))
+                .flatten();
+            MailboxRow {
+                label: mailbox.label.clone().into(),
+                scope: mailbox.scope.clone().into(),
+                context: mailbox.context.clone().into(),
+                detail: mailbox.detail.clone().into(),
+                avatar: mailbox.avatar.clone().into(),
+                avatar_image: avatar
+                    .map(|images| slint_image(&images.small))
+                    .unwrap_or_default(),
+                has_avatar: avatar.is_some(),
+                is_account: mailbox.is_account,
+                count: mailbox.count.clone().into(),
+            }
+        })
+        .collect()
+}
+
+pub(super) fn make_account_mailbox_rows(
+    mailboxes: &[MailboxEntry],
+    avatars: &HashMap<i64, ProfileAvatarImages>,
+) -> Vec<MailboxRow> {
+    make_mailbox_rows(mailboxes, avatars)
+        .into_iter()
+        .filter(|mailbox| mailbox.is_account)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn message(id: i32) -> MailMessage {
+        MailMessage {
+            id,
+            thread_id: Some(i64::from(id)),
+            account: String::new(),
+            folder: String::new(),
+            sender: String::new(),
+            address: String::new(),
+            domain: String::new(),
+            initials: String::new(),
+            subject: String::new(),
+            preview: String::new(),
+            time: String::new(),
+            to: String::new(),
+            label: String::new(),
+            unread: false,
+            starred: false,
+            has_attachments: false,
+            html: None,
+            body_pending: true,
+            sender_verification: String::new(),
+        }
+    }
+
+    #[test]
+    fn head_refresh_merges_into_the_retained_tail() {
+        let current = (1..=50).map(message).collect::<Vec<_>>();
+        let refreshed = [101, 102]
+            .into_iter()
+            .chain(1..=23)
+            .map(message)
+            .collect::<Vec<_>>();
+        let (merged, retained_tail) = merge_refreshed_mail_head(
+            &current,
+            refreshed,
+            Some(ThreadCursor {
+                last_message_at: 0,
+                thread_id: 23,
+            }),
+        );
+
+        assert!(retained_tail);
+        assert_eq!(merged.len(), 52);
+        assert_eq!(merged.iter().map(|row| row.id).collect::<HashSet<_>>().len(), 52);
+        assert_eq!(merged[0].id, 101);
+        assert_eq!(merged[24].id, 23);
+        assert_eq!(merged[25].id, 24);
+        assert_eq!(merged.last().map(|row| row.id), Some(50));
+    }
+
+    #[test]
+    fn exhausted_head_refresh_replaces_the_old_tail() {
+        let current = (1..=50).map(message).collect::<Vec<_>>();
+        let refreshed = (1..=12).map(message).collect::<Vec<_>>();
+        let (merged, retained_tail) = merge_refreshed_mail_head(&current, refreshed, None);
+        assert!(!retained_tail);
+        assert_eq!(merged.len(), 12);
+    }
+}

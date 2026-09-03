@@ -1,0 +1,80 @@
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[package]
+name = "flectar-mail-android"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "AGPL-3.0-only"
+repository = "https://github.com/flectar/mail"
+homepage = "https://flectar.com"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+flectar-mail = { path = "../..", default-features = false, features = ["remote-content"] }
+async-trait = "0.1"
+base64 = "0.23"
+jni = "0.21"
+serde_json = "1"
+slint = { version = "1.17", default-features = false, features = [
+    "std",
+    "backend-android-activity-06",
+    "renderer-skia",
+] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
+tokio = { version = "1", features = ["sync", "time"] }
+url = "2"
+
+[package.metadata.android]
+package = "com.flectar.mail"
+apk_name = "flectar-mail"
+# Keep third-party notices inspectable in the APK alongside the embedded font.
+assets = "assets"
+# Release CI selects arm64 explicitly. Keeping x86_64 here as well lets Intel
+# and AMD development machines produce an emulator APK without editing this
+# manifest or risking a different source configuration.
+build_targets = ["aarch64-linux-android", "x86_64-linux-android"]
+
+[package.metadata.android.sdk]
+min_sdk_version = 26
+target_sdk_version = 36
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.ACCESS_NETWORK_STATE"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.POST_NOTIFICATIONS"
+
+[package.metadata.android.application]
+label = "Flectar Mail"
+theme = "@android:style/Theme.Material.Light.NoActionBar"
+# Provider traffic is TLS-only. Local development exceptions must use adb
+# reverse-port forwarding instead of weakening every endpoint in the APK.
+uses_cleartext_traffic = false
+
+[package.metadata.android.application.activity]
+exported = true
+launch_mode = "singleTask"
+orientation = "unspecified"
+
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.VIEW"]
+categories = ["android.intent.category.DEFAULT", "android.intent.category.BROWSABLE"]
+
+[[package.metadata.android.application.activity.intent_filter.data]]
+scheme = "msauth"
+host = "com.flectar.mail"

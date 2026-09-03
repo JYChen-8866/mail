@@ -1,0 +1,70 @@
+import { HorizontalBox } from "std-widgets.slint";
+import { AppTheme, LayoutMetrics } from "../design-system.slint";
+import { TypeScale } from "../typography.slint";
+
+// Application-owned button with deterministic geometry across compositors.
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <bool> colorize-icon: true;
+    in property <length> icon-size: 16px;
+    in property <bool> primary: false;
+    in property <bool> destructive: false;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    height: 32px;
+    min-width: 64px;
+    border-radius: LayoutMetrics.corner-radius - 2px;
+    border-width: root.primary || root.destructive ? 0px : 1px;
+    border-color: root.selected ? AppTheme.accent : AppTheme.control-border;
+    background: !root.enabled ? AppTheme.disabled-bg
+        : root.destructive ? (button-area.pressed ? AppTheme.destructive-pressed : button-area.has-hover ? AppTheme.destructive-hover : AppTheme.destructive)
+        : root.primary ? (button-area.pressed ? AppTheme.primary-pressed : button-area.has-hover ? AppTheme.primary-hover : AppTheme.primary)
+        : root.selected ? AppTheme.accent-soft
+        : button-area.pressed ? AppTheme.muted-control-bg
+        : button-area.has-hover ? AppTheme.control-bg.brighter(AppTheme.dark ? 8% : 2%)
+        : AppTheme.surface;
+    opacity: root.enabled ? 1 : 0.5;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+
+    HorizontalBox {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 7px;
+        alignment: center;
+        cross-axis-alignment: center;
+
+        if root.has-icon : Image {
+            width: root.icon-size;
+            height: root.icon-size;
+            source: root.icon;
+            colorize: root.colorize-icon ? (root.primary || root.destructive ? white : AppTheme.body) : transparent;
+            image-fit: contain;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.text;
+            color: root.primary || root.destructive ? white : root.selected ? AppTheme.accent : AppTheme.heading;
+            font-size: TypeScale.body;
+            font-weight: root.primary || root.destructive || root.selected ? 600 : 500;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    button-area := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+        mouse-cursor: pointer;
+    }
+}

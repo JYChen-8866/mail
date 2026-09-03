@@ -1,0 +1,288 @@
+import { HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { TypeScale } from "../typography.slint";
+import { LayoutMetrics } from "../design-system.slint";
+
+
+component ProductRailItem inherits Rectangle {
+    in property <string> label;
+    in property <image> outline-icon;
+    in property <image> filled-icon;
+    in property <bool> active: false;
+    in property <color> accent-color;
+    in property <color> accent-background;
+    in property <color> muted-color;
+    out property <bool> hovered: item-hit.has-hover;
+    callback clicked;
+
+    // Desktop navigation is icon-only. The target and selected surface remain
+    // square so each destination has an even, predictable hit area.
+    height: 48px;
+    background: transparent;
+
+    Rectangle {
+        x: (parent.width - self.width) / 2;
+        y: 4px;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: root.active || item-hit.has-hover ? root.accent-background : transparent;
+        Image {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: 20px;
+            height: 20px;
+            source: root.active ? root.filled-icon : root.outline-icon;
+            colorize: root.active ? root.accent-color : root.muted-color;
+            image-fit: contain;
+            accessible-role: none;
+        }
+        item-hit := TouchArea {
+            accessible-role: button;
+            accessible-label: root.label;
+            accessible-checked: root.active;
+            accessible-action-default => { root.clicked(); }
+            clicked => { root.clicked(); }
+            mouse-cursor: pointer;
+        }
+    }
+
+}
+
+// The product rail is deliberately narrow: it switches workspaces without
+// competing with the context-specific sidebar immediately to its right.
+export component ProductRail inherits Rectangle {
+    in-out property <string> active-view: "mail";
+    in property <bool> settings-active: false;
+    in property <color> background-color;
+    in property <color> divider-color;
+    in property <color> accent-color;
+    in property <color> accent-background;
+    in property <color> title-color;
+    in property <color> muted-color;
+    out property <string> tooltip-text: mail-item.hovered ? mail-item.label
+        : calendar-item.hovered ? calendar-item.label
+        : contacts-item.hovered ? contacts-item.label
+        : settings-item.hovered ? settings-item.label
+        : "";
+    out property <length> tooltip-y: mail-item.hovered ? mail-item.y + 10px
+        : calendar-item.hovered ? calendar-item.y + 10px
+        : contacts-item.hovered ? contacts-item.y + 10px
+        : settings-item.hovered ? settings-item.y + 10px
+        : 0px;
+    callback open-settings;
+    callback select-view(string);
+
+    width: LayoutMetrics.product-rail-width;
+    background: root.background-color;
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: parent.height;
+        background: root.divider-color;
+    }
+
+    VerticalBox {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        // 8px outer padding and 48px items preserve a compact 8px rhythm.
+        padding-top: 8px;
+        padding-right: 0px;
+        padding-bottom: 10px;
+        padding-left: 0px;
+        spacing: 8px;
+
+        mail-item := ProductRailItem {
+            label: @tr("Mail");
+            outline-icon: @image-url("../icons/solar-icons/letter-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/letter-bold.svg");
+            active: !root.settings-active && root.active-view == "mail";
+            accent-color: root.accent-color;
+            accent-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.select-view("mail"); }
+        }
+
+        calendar-item := ProductRailItem {
+            label: @tr("Calendar");
+            outline-icon: @image-url("../icons/solar-icons/calendar-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/calendar-bold.svg");
+            active: !root.settings-active && root.active-view == "calendar";
+            accent-color: root.accent-color;
+            accent-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.select-view("calendar"); }
+        }
+
+        contacts-item := ProductRailItem {
+            label: @tr("Contacts");
+            outline-icon: @image-url("../icons/solar-icons/users-group-two-rounded-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+            active: !root.settings-active && root.active-view == "contacts";
+            accent-color: root.accent-color;
+            accent-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.select-view("contacts"); }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+
+        settings-item := ProductRailItem {
+            label: @tr("Settings");
+            outline-icon: @image-url("../icons/solar-icons/settings-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/settings-bold.svg");
+            active: root.settings-active;
+            accent-color: root.accent-color;
+            accent-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.open-settings(); }
+        }
+    }
+}
+
+// Compact navigation stays at the bottom, inside Window.safe-area-insets. This
+// keeps the primary destinations in thumb reach without duplicating any
+// application state or business logic.
+component CompactProductNavItem inherits Rectangle {
+    in property <string> label;
+    in property <image> outline-icon;
+    in property <image> filled-icon;
+    in property <bool> active: false;
+    in property <color> accent-color;
+    in property <color> active-background;
+    in property <color> muted-color;
+    callback clicked;
+
+    min-width: 64px;
+    height: 64px;
+    background: transparent;
+
+    // The selected destination uses a compact indicator behind the icon.
+    // Keeping the label outside it prevents the active item from looking like
+    // an oversized card at narrow window widths.
+    Rectangle {
+        x: (parent.width - 56px) / 2;
+        y: 6px;
+        width: 56px;
+        height: 32px;
+        border-radius: 16px;
+        background: root.active || nav-hit.has-hover ? root.active-background : transparent;
+
+        Image {
+            x: (parent.width - 22px) / 2;
+            y: 5px;
+            width: 22px;
+            height: 22px;
+            source: root.active ? root.filled-icon : root.outline-icon;
+            colorize: root.active ? root.accent-color : root.muted-color;
+            image-fit: contain;
+            accessible-role: none;
+        }
+    }
+    Text {
+        x: 2px;
+        y: 40px;
+        width: parent.width - 4px;
+        height: 18px;
+        text: root.label;
+        color: root.active ? root.accent-color : root.muted-color;
+        font-size: TypeScale.caption;
+        font-weight: root.active ? 700 : 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    // Make the complete navigation item interactive, including the space
+    // around its indicator and label.
+    nav-hit := TouchArea {
+        mouse-cursor: pointer;
+        accessible-role: button;
+        accessible-label: root.label;
+        accessible-id: "mobile-nav-" + root.label.to-lowercase();
+        accessible-checked: root.active;
+        accessible-action-default => { root.clicked(); }
+        clicked => { root.clicked(); }
+    }
+}
+
+export component CompactProductNav inherits Rectangle {
+    in-out property <string> active-view: "mail";
+    in property <bool> settings-active: false;
+    in property <color> background-color;
+    in property <color> divider-color;
+    in property <color> accent-color;
+    in property <color> accent-background;
+    in property <color> muted-color;
+    callback open-settings;
+    callback select-view(string);
+
+    height: LayoutMetrics.compact-navigation-height;
+    background: root.background-color;
+    accessible-role: navigation;
+    accessible-label: @tr("Primary navigation");
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 1px;
+        background: root.divider-color;
+    }
+
+    HorizontalBox {
+        x: 4px;
+        y: 1px;
+        width: parent.width - 8px;
+        height: 79px;
+        padding-top: 7px;
+        padding-bottom: 8px;
+        spacing: 2px;
+
+        CompactProductNavItem {
+            horizontal-stretch: 1;
+            label: @tr("Mail");
+            outline-icon: @image-url("../icons/solar-icons/letter-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/letter-bold.svg");
+            active: !root.settings-active && root.active-view == "mail";
+            accent-color: root.accent-color;
+            active-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.select-view("mail"); }
+        }
+        CompactProductNavItem {
+            horizontal-stretch: 1;
+            label: @tr("Calendar");
+            outline-icon: @image-url("../icons/solar-icons/calendar-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/calendar-bold.svg");
+            active: !root.settings-active && root.active-view == "calendar";
+            accent-color: root.accent-color;
+            active-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.select-view("calendar"); }
+        }
+        CompactProductNavItem {
+            horizontal-stretch: 1;
+            label: @tr("Contacts");
+            outline-icon: @image-url("../icons/solar-icons/users-group-two-rounded-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+            active: !root.settings-active && root.active-view == "contacts";
+            accent-color: root.accent-color;
+            active-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.select-view("contacts"); }
+        }
+        CompactProductNavItem {
+            horizontal-stretch: 1;
+            label: @tr("Settings");
+            outline-icon: @image-url("../icons/solar-icons/settings-outline.svg");
+            filled-icon: @image-url("../icons/solar-icons/settings-bold.svg");
+            active: root.settings-active;
+            accent-color: root.accent-color;
+            active-background: root.accent-background;
+            muted-color: root.muted-color;
+            clicked => { root.open-settings(); }
+        }
+    }
+}
