@@ -1,9 +1,12 @@
-# Flectar Mail
-
 <div align="center">
   <img src="resources/app-icon/flectar-mail-masked.png" width="112" alt="Flectar Mail logo">
-  <h3>Email, made fast again.</h3>
-  <p>Built from the ground up for speed. Flectar Mail delivers native performance, instant startup, and as little as 20 MB of RAM.</p>
+  <h1 align="center">
+    Flectar Mail
+  </h1>
+  <div align="center">
+    <h3>Email, made fast again</h3>
+    <p>Built from the ground up for speed. Flectar Mail delivers native performance, instant startup, and as little as 20 MB of RAM.</p>
+  </div>
   <p>
     <a href="https://flectar.com">Website</a> ·
     <a href="https://github.com/flectar/mail/issues">Report an issue</a> ·
@@ -53,14 +56,21 @@ Choose the workspace that fits the way you handle email. Keep the detailed
 three-pane layout, switch to a streamlined minimal view, choose a light or dark
 theme, and show or hide sender avatars.
 
-### Minimal layout
+The full workspace keeps your folders, message list, and selected email visible
+together. The minimal layout reduces visual noise and gives each part of your
+inbox more room when you need it.
 
-The minimal layout reduces visual noise and gives each part of your inbox more
-room when you need it.
+### Light
 
-| Light | Dark |
+| Full workspace | Minimal workspace |
 | --- | --- |
-| ![Flectar Mail minimal desktop workspace in light mode](resources/screenshots/desktop-minimal-light.png) | ![Flectar Mail minimal desktop workspace in dark mode](resources/screenshots/desktop-minimal-dark.png) |
+| ![Flectar Mail full desktop workspace in light mode](resources/screenshots/desktop-light.png) | ![Flectar Mail minimal desktop workspace in light mode](resources/screenshots/desktop-minimal-light.png) |
+
+### Dark
+
+| Full workspace | Minimal workspace |
+| --- | --- |
+| ![Flectar Mail full desktop workspace in dark mode](resources/screenshots/desktop-dark.png) | ![Flectar Mail minimal desktop workspace in dark mode](resources/screenshots/desktop-minimal-dark.png) |
 
 ### Made for smaller screens
 
