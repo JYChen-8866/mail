@@ -6,7 +6,7 @@ import { Palette } from "std-widgets.slint";
 import { TypeScale } from "typography.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
-import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactAccountRow, ContactRow, EmailLink, EmailRow, EmailTile, LocalizedMessage, MailboxRow } from "models.slint";
+import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactAccountRow, ContactRow, EmailLink, EmailRow, EmailTile, LocalizedMessage, MailboxRow, MailLabelRow } from "models.slint";
 import { FunctionalCalendarView } from "components/calendar.slint";
 import { CompactProductNav, ProductRail } from "components/product-rail.slint";
 import { WorkspaceFrame } from "components/workspace-layout.slint";
@@ -312,6 +312,12 @@ export global I18n {
         if (key == "Message action completed.") { return @tr("Message action completed."); }
         if (key == "Message action failed: {}") { return @tr("Message action failed: {}", argument); }
         if (key == "Message action failed: message is no longer available") { return @tr("Message action failed: message is no longer available"); }
+        if (key == "Label added.") { return @tr("Label added."); }
+        if (key == "Label removed.") { return @tr("Label removed."); }
+        if (key == "Label created and added.") { return @tr("Label created and added."); }
+        if (key == "Label updated.") { return @tr("Label updated."); }
+        if (key == "Could not update label: {}") { return @tr("Could not update label: {}", argument); }
+        if (key == "Could not save label: {}") { return @tr("Could not save label: {}", argument); }
         if (key == "Could not close preview: {}") { return @tr("Could not close preview: {}", argument); }
         if (key == "Opened the system print view.") { return @tr("Opened the system print view."); }
         if (key == "Could not print message: {}") { return @tr("Could not print message: {}", argument); }
@@ -386,6 +392,9 @@ export component AppWindow inherits Window {
     callback sync_mail();
     callback message_action(string);
     callback message_action_for_email(int, string);
+    callback toggle_mail_label(int, bool);
+    callback save_mail_label(int, string, color);
+    callback search_mail_labels(string);
     callback compose_message_action(string);
     callback close_preview();
     callback print_message();
@@ -477,6 +486,9 @@ export component AppWindow inherits Window {
     in property <[MailboxRow]> mailboxes: [];
     in property <[MailboxRow]> account_mailboxes: [];
     in property <[MailboxRow]> unified_mailboxes: [];
+    in property <[MailLabelRow]> mail_labels: [];
+    in property <[MailLabelRow]> mail_label_results: [];
+    in property <int> selected_mail_label_count: 0;
     in property <[AccountRow]> connected_accounts: [];
     // The saved visible page can paint before the core is safe to use. Keep
     // that presentation milestone separate from startup-ready, which guards
@@ -577,6 +589,8 @@ export component AppWindow inherits Window {
     in property <bool> mail_loading_more: false;
     in property <int> mail_list_revision: 0;
     in property <bool> has_selected: true;
+    in property <int> previous_email_id: -1;
+    in property <int> next_email_id: -1;
     in property <bool> selected_starred: false;
     in property <bool> selected_unread: false;
     in property <string> selected_sender_verification: "";
@@ -791,6 +805,9 @@ export component AppWindow inherits Window {
             mailboxes: root.mailboxes;
             account_mailboxes: root.account_mailboxes;
             unified_mailboxes: root.unified_mailboxes;
+            mail_labels: root.mail_labels;
+            mail_label_results: root.mail_label_results;
+            selected_mail_label_count: root.selected_mail_label_count;
             email_tiles: root.email_tiles;
             email_links: root.email_links;
             active_view: root.active_view;
@@ -821,6 +838,8 @@ export component AppWindow inherits Window {
             loading_more: root.mail_loading_more;
             list_content_revision: root.mail_list_revision;
             has_selected: root.startup_ready && root.has_selected;
+            previous-email-id: root.previous_email_id;
+            next-email-id: root.next_email_id;
             selected_starred: root.selected_starred;
             selected_unread: root.selected_unread;
             selected_sender_verification: root.selected_sender_verification;
@@ -861,6 +880,9 @@ export component AppWindow inherits Window {
             sync_mail => { root.sync_mail(); }
             message_action(action) => { root.message_action(action); }
             message_action_for_email(id, action) => { root.message_action_for_email(id, action); }
+            toggle_mail_label(id, applied) => { root.toggle_mail_label(id, applied); }
+            save_mail_label(id, name, color) => { root.save_mail_label(id, name, color); }
+            search_mail_labels(query) => { root.search_mail_labels(query); }
             compose_message_action(action) => { root.compose_message_action(action); }
             close_preview => { root.close_preview(); }
             print_message => { root.print_message(); }

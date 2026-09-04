@@ -204,12 +204,12 @@ export component SettingsDialog inherits Rectangle {
                         spacing: 5px;
                         Text { height: 22px; text: @tr("SETTINGS"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
 
-                        SettingsNavItem { text: @tr("General"); icon: @image-url("../icons/solar-icons/tuning-2-bold.svg"); selected: root.settings_tab == "General"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "General"; } }
-                        SettingsNavItem { text: @tr("Accounts"); icon: @image-url("../icons/solar-icons/user-circle-bold.svg"); selected: root.settings_tab == "Accounts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Accounts"; } }
-                        SettingsNavItem { text: @tr("Notifications"); icon: @image-url("../icons/solar-icons/bell-bold.svg"); selected: root.settings_tab == "Notifications"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Notifications"; } }
-                        SettingsNavItem { text: @tr("Shortcuts"); icon: @image-url("../icons/solar-icons/keyboard-bold.svg"); selected: root.settings_tab == "Shortcuts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Shortcuts"; } }
-                        SettingsNavItem { text: @tr("Data management"); icon: @image-url("../icons/solar-icons/database-bold.svg"); selected: root.settings_tab == "Data"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Data"; } }
-                        SettingsNavItem { text: @tr("About"); icon: @image-url("../icons/solar-icons/info-circle-bold.svg"); selected: root.settings_tab == "About"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "About"; } }
+                        SettingsNavItem { text: @tr("General"); icon: @image-url("../icons/phosphor/sliders-horizontal-fill.svg"); selected: root.settings_tab == "General"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "General"; } }
+                        SettingsNavItem { text: @tr("Accounts"); icon: @image-url("../icons/phosphor/user-circle-fill.svg"); selected: root.settings_tab == "Accounts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Accounts"; } }
+                        SettingsNavItem { text: @tr("Notifications"); icon: @image-url("../icons/phosphor/bell-fill.svg"); selected: root.settings_tab == "Notifications"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Notifications"; } }
+                        SettingsNavItem { text: @tr("Shortcuts"); icon: @image-url("../icons/phosphor/keyboard-fill.svg"); selected: root.settings_tab == "Shortcuts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Shortcuts"; } }
+                        SettingsNavItem { text: @tr("Data management"); icon: @image-url("../icons/phosphor/database-fill.svg"); selected: root.settings_tab == "Data"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Data"; } }
+                        SettingsNavItem { text: @tr("About"); icon: @image-url("../icons/phosphor/info-fill.svg"); selected: root.settings_tab == "About"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "About"; } }
                         Rectangle { vertical-stretch: 1; }
                     }
                 }
@@ -575,7 +575,7 @@ export component SettingsDialog inherits Rectangle {
                                     ProviderButton {
                                         horizontal-stretch: 1;
                                         text: @tr("Add mail account");
-                                        icon: @image-url("../icons/solar-icons/letter-outline.svg");
+                                        icon: @image-url("../icons/phosphor/envelope.svg");
                                         colorize-icon: true;
                                         enabled: !root.oauth_in_progress;
                                         foreground: root.body-text;
@@ -596,7 +596,7 @@ export component SettingsDialog inherits Rectangle {
                                     spacing: 8px;
                                     ProviderButton { text: @tr("Add Gmail"); icon: @image-url("../icons/brand/gmail.svg"); enabled: !root.oauth_in_progress; foreground: root.body-text; muted: root.muted-text; surface: root.surface-raised; hover-surface: root.accent-soft; button-border: root.border-subtle; clicked => { root.start_oauth("gmail"); } }
                                     ProviderButton { text: @tr("Add Outlook"); icon: @image-url("../icons/brand/outlook.svg"); enabled: !root.oauth_in_progress; foreground: root.body-text; muted: root.muted-text; surface: root.surface-raised; hover-surface: root.accent-soft; button-border: root.border-subtle; clicked => { root.start_oauth("microsoft"); } }
-                                    ProviderButton { text: @tr("Add mail account"); icon: @image-url("../icons/solar-icons/letter-outline.svg"); colorize-icon: true; enabled: !root.oauth_in_progress; foreground: root.body-text; muted: root.muted-text; surface: root.surface-raised; hover-surface: root.accent-soft; button-border: root.border-subtle; clicked => { root.open_new_imap(); } }
+                                    ProviderButton { text: @tr("Add mail account"); icon: @image-url("../icons/phosphor/envelope.svg"); colorize-icon: true; enabled: !root.oauth_in_progress; foreground: root.body-text; muted: root.muted-text; surface: root.surface-raised; hover-surface: root.accent-soft; button-border: root.border-subtle; clicked => { root.open_new_imap(); } }
                                     if root.oauth_in_progress : Button { height: 44px; text: @tr("Cancel sign-in"); clicked => { root.cancel_oauth(); } }
                                 }
                             }
@@ -628,7 +628,7 @@ export component SettingsDialog inherits Rectangle {
                                             width: 20px;
                                             data: root.make_account_transfer(account.drag_key);
                                             allow-move: true;
-                                            Image { width: 17px; height: 17px; source: @image-url("../icons/solar-icons/reorder-outline.svg"); colorize: root.muted-text; image-fit: contain; accessible-role: none; }
+                                            Image { width: 17px; height: 17px; source: @image-url("../icons/phosphor/list.svg"); colorize: root.muted-text; image-fit: contain; accessible-role: none; }
                                         }
                                         Rectangle {
                                             width: 44px;
@@ -648,7 +648,7 @@ export component SettingsDialog inherits Rectangle {
                                             }
                                             if !account.has_avatar : Image {
                                                 x: 10px; y: 10px; width: 24px; height: 24px;
-                                                source: account.provider == "gmail" ? @image-url("../icons/brand/gmail.svg") : account.provider == "microsoft" ? @image-url("../icons/brand/outlook.svg") : @image-url("../icons/solar-icons/letter-outline.svg");
+                                                source: account.provider == "gmail" ? @image-url("../icons/brand/gmail.svg") : account.provider == "microsoft" ? @image-url("../icons/brand/outlook.svg") : @image-url("../icons/phosphor/envelope.svg");
                                                 colorize: account.provider == "imap" ? root.accent : transparent;
                                                 image-fit: contain;
                                                 accessible-role: none;
@@ -794,9 +794,9 @@ export component SettingsDialog inherits Rectangle {
                                 height: root.account-transfer-supported ? (root.compact ? 188px : 136px) : 0px;
                                 vertical-stretch: 0;
                                 SettingsCard { title: @tr("Database snapshot"); description: @tr("Export verified copies of the mail and calendar databases with their schema versions."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
-                                Image { x: 20px; y: 79px; width: 18px; height: 18px; source: @image-url("../icons/solar-icons/database-bold.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
+                                Image { x: 20px; y: 79px; width: 18px; height: 18px; source: @image-url("../icons/phosphor/database-fill.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
                                 Text { x: 48px; y: 72px; width: root.compact ? parent.width - 68px : parent.width - 260px; height: 42px; text: @tr("The snapshot contains private local mail and settings, but not passwords or OAuth tokens. Store it securely."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
-                                Button { x: root.compact ? 20px : parent.width - self.width - 20px; y: root.compact ? 139px : 77px; width: root.compact ? parent.width - 40px : 170px; text: @tr("Export snapshot"); icon: @image-url("../icons/solar-icons/download-minimalistic-outline.svg"); has-icon: true; clicked => { root.export_database_snapshot(); } }
+                                Button { x: root.compact ? 20px : parent.width - self.width - 20px; y: root.compact ? 139px : 77px; width: root.compact ? parent.width - 40px : 170px; text: @tr("Export snapshot"); icon: @image-url("../icons/phosphor/download.svg"); has-icon: true; clicked => { root.export_database_snapshot(); } }
                             }
 
                             Rectangle {
@@ -804,7 +804,7 @@ export component SettingsDialog inherits Rectangle {
                                 height: root.account-transfer-supported ? (root.compact ? 188px : 136px) : 0px;
                                 vertical-stretch: 0;
                                 SettingsCard { title: @tr("Transfer account setup"); description: @tr("Import a backup or export one connected account and your preferences." | "Import a backup or export {n} connected accounts and your preferences." % root.connected_accounts.length); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
-                                Image { x: 20px; y: 79px; width: 18px; height: 18px; source: @image-url("../icons/solar-icons/verified-check-bold.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
+                                Image { x: 20px; y: 79px; width: 18px; height: 18px; source: @image-url("../icons/phosphor/check-circle-fill.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
                                 Text { x: 48px; y: 72px; width: root.compact ? parent.width - 68px : parent.width - 360px; height: 42px; text: @tr("Passwords and OAuth tokens stay in the system keyring. A restored device asks you to sign in securely."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
                                 HorizontalBox {
                                     x: root.compact ? 20px : parent.width - 300px;
@@ -812,8 +812,8 @@ export component SettingsDialog inherits Rectangle {
                                     width: root.compact ? parent.width - 40px : 280px;
                                     height: 32px;
                                     spacing: 8px;
-                                    Button { text: @tr("Import"); icon: @image-url("../icons/solar-icons/import-outline.svg"); has-icon: true; clicked => { root.import_account_backup(); } }
-                                    Button { text: @tr("Export"); icon: @image-url("../icons/solar-icons/download-minimalistic-outline.svg"); has-icon: true; primary: true; enabled: root.connected_accounts.length > 0; clicked => { root.export_account_backup(); } }
+                                    Button { text: @tr("Import"); icon: @image-url("../icons/phosphor/tray-arrow-down.svg"); has-icon: true; clicked => { root.import_account_backup(); } }
+                                    Button { text: @tr("Export"); icon: @image-url("../icons/phosphor/download.svg"); has-icon: true; primary: true; enabled: root.connected_accounts.length > 0; clicked => { root.export_account_backup(); } }
                                 }
                             }
 
@@ -821,9 +821,9 @@ export component SettingsDialog inherits Rectangle {
                                 height: root.compact ? 188px : 136px;
                                 vertical-stretch: 0;
                                 SettingsCard { title: @tr("Delete all local data"); description: @tr("Remove accounts, downloaded mail, calendars, contacts, preferences, and credentials from this device."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
-                                Image { x: 20px; y: 78px; width: 18px; height: 18px; source: @image-url("../icons/solar-icons/trash-bin-trash-bold.svg"); colorize: #d04a43; image-fit: contain; accessible-role: none; }
+                                Image { x: 20px; y: 78px; width: 18px; height: 18px; source: @image-url("../icons/phosphor/trash-fill.svg"); colorize: #d04a43; image-fit: contain; accessible-role: none; }
                                 Text { x: 48px; y: 72px; width: root.compact ? parent.width - 68px : parent.width - 260px; height: 42px; text: @tr("This does not delete anything from Gmail, Outlook, or your IMAP server."); color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; vertical-alignment: center; }
-                                Button { x: root.compact ? 20px : parent.width - self.width - 20px; y: root.compact ? 139px : 77px; width: root.compact ? parent.width - 40px : 170px; text: @tr("Delete everything"); icon: @image-url("../icons/solar-icons/trash-bin-trash-bold.svg"); has-icon: true; clicked => { root.delete_data_confirmation = true; } }
+                                Button { x: root.compact ? 20px : parent.width - self.width - 20px; y: root.compact ? 139px : 77px; width: root.compact ? parent.width - 40px : 170px; text: @tr("Delete everything"); icon: @image-url("../icons/phosphor/trash-fill.svg"); has-icon: true; clicked => { root.delete_data_confirmation = true; } }
                             }
 
                             if root.sync_status != "" : Text { height: 22px; text: root.sync_status; color: root.secondary-text; font-size: TypeScale.caption; vertical-alignment: center; overflow: elide; }
@@ -990,7 +990,7 @@ export component SettingsDialog inherits Rectangle {
                                     SettingsLinkRow {
                                         text: @tr("Open-source contributors");
                                         description: @tr("Meet the people who have contributed on GitHub");
-                                        icon: @image-url("../icons/solar-icons/users-group-two-rounded-outline.svg");
+                                        icon: @image-url("../icons/phosphor/users.svg");
                                         accent: root.accent;
                                         body-text: root.body-text;
                                         muted-text: root.faint-text;
@@ -1028,7 +1028,7 @@ export component SettingsDialog inherits Rectangle {
                 z: 200;
                 title: root.settings_tab == "Data" ? @tr("Data management") : root.settings_tab;
                 show-leading: true;
-                leading-icon: @image-url("../icons/solar-icons/tuning-2-bold.svg");
+                leading-icon: @image-url("../icons/phosphor/sliders-horizontal-fill.svg");
                 leading-tooltip: @tr("Settings sections");
                 leading-accessible-id: "settings-menu-button";
                 background-color: root.sidebar-bg;
@@ -1037,7 +1037,7 @@ export component SettingsDialog inherits Rectangle {
                     width: LayoutMetrics.touch-target;
                     height: LayoutMetrics.touch-target;
                     icon-size: 18px;
-                    icon: @image-url("../icons/solar-icons/close-outline.svg");
+                    icon: @image-url("../icons/phosphor/x.svg");
                     icon-color: root.secondary-text;
                     idle-background: transparent;
                     hover-background: root.accent-soft;
@@ -1075,12 +1075,12 @@ export component SettingsDialog inherits Rectangle {
                     padding-left: 12px;
                     spacing: 7px;
                     Text { height: 34px; text: @tr("SETTINGS"); color: root.muted-text; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
-                    SettingsNavItem { text: @tr("General"); icon: @image-url("../icons/solar-icons/tuning-2-bold.svg"); selected: root.settings_tab == "General"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "General"; root.compact-nav-open = false; } }
-                    SettingsNavItem { text: @tr("Accounts"); icon: @image-url("../icons/solar-icons/user-circle-bold.svg"); selected: root.settings_tab == "Accounts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Accounts"; root.compact-nav-open = false; } }
-                    SettingsNavItem { text: @tr("Notifications"); icon: @image-url("../icons/solar-icons/bell-bold.svg"); selected: root.settings_tab == "Notifications"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Notifications"; root.compact-nav-open = false; } }
-                    SettingsNavItem { text: @tr("Shortcuts"); icon: @image-url("../icons/solar-icons/keyboard-bold.svg"); selected: root.settings_tab == "Shortcuts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Shortcuts"; root.compact-nav-open = false; } }
-                    SettingsNavItem { text: @tr("Data management"); icon: @image-url("../icons/solar-icons/database-bold.svg"); selected: root.settings_tab == "Data"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Data"; root.compact-nav-open = false; } }
-                    SettingsNavItem { text: @tr("About"); icon: @image-url("../icons/solar-icons/info-circle-bold.svg"); selected: root.settings_tab == "About"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "About"; root.compact-nav-open = false; } }
+                    SettingsNavItem { text: @tr("General"); icon: @image-url("../icons/phosphor/sliders-horizontal-fill.svg"); selected: root.settings_tab == "General"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "General"; root.compact-nav-open = false; } }
+                    SettingsNavItem { text: @tr("Accounts"); icon: @image-url("../icons/phosphor/user-circle-fill.svg"); selected: root.settings_tab == "Accounts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Accounts"; root.compact-nav-open = false; } }
+                    SettingsNavItem { text: @tr("Notifications"); icon: @image-url("../icons/phosphor/bell-fill.svg"); selected: root.settings_tab == "Notifications"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Notifications"; root.compact-nav-open = false; } }
+                    SettingsNavItem { text: @tr("Shortcuts"); icon: @image-url("../icons/phosphor/keyboard-fill.svg"); selected: root.settings_tab == "Shortcuts"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Shortcuts"; root.compact-nav-open = false; } }
+                    SettingsNavItem { text: @tr("Data management"); icon: @image-url("../icons/phosphor/database-fill.svg"); selected: root.settings_tab == "Data"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Data"; root.compact-nav-open = false; } }
+                    SettingsNavItem { text: @tr("About"); icon: @image-url("../icons/phosphor/info-fill.svg"); selected: root.settings_tab == "About"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "About"; root.compact-nav-open = false; } }
                     Rectangle { vertical-stretch: 1; }
                 }
             }
@@ -1134,7 +1134,7 @@ export component SettingsDialog inherits Rectangle {
                                 height: 44px;
                                 border-radius: 12px;
                                 background: root.accent-soft;
-                                Image { x: 11px; y: 11px; width: 22px; height: 22px; source: @image-url("../icons/solar-icons/letter-outline.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
+                                Image { x: 11px; y: 11px; width: 22px; height: 22px; source: @image-url("../icons/phosphor/envelope.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
                             }
                             VerticalBox {
                                 spacing: 2px;
@@ -1142,7 +1142,7 @@ export component SettingsDialog inherits Rectangle {
                                 Text { text: root.account_protocol == "jmap" ? @tr("Uses JMAP for mail sync and sending, with automatic discovery.") : @tr("Uses separate IMAP and SMTP servers for mail sync and sending."); color: root.faint-text; font-size: TypeScale.caption; overflow: elide; }
                             }
                             Rectangle { horizontal-stretch: 1; }
-                            IconButton { width: 40px; height: 40px; icon: @image-url("../icons/solar-icons/close-outline.svg"); icon-color: root.secondary-text; idle-background: transparent; hover-background: root.accent-soft; tooltip-text: @tr("Close"); clicked => { root.imap_form_open = false; } }
+                            IconButton { width: 40px; height: 40px; icon: @image-url("../icons/phosphor/x.svg"); icon-color: root.secondary-text; idle-background: transparent; hover-background: root.accent-soft; tooltip-text: @tr("Close"); clicked => { root.imap_form_open = false; } }
                         }
 
                         imap-scroll := ScrollView {
@@ -1225,7 +1225,7 @@ export component SettingsDialog inherits Rectangle {
             detail: @tr("Mail and events on Gmail, Outlook, and IMAP servers will not be deleted.");
             confirm-label: @tr("Delete everything");
             cancel-label: @tr("Keep my data");
-            icon: @image-url("../icons/solar-icons/trash-bin-trash-bold.svg");
+            icon: @image-url("../icons/phosphor/trash-fill.svg");
             surface: root.surface;
             dialog-border-color: root.border-subtle;
             title-color: root.title-color;

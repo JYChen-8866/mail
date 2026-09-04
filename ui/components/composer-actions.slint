@@ -61,8 +61,8 @@ export component ComposerToolbar inherits Rectangle {
 
             Rectangle { horizontal-stretch: 1; }
 
-            IconButton { icon: @image-url("../icons/solar-icons/undo-left-outline.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Undo · Ctrl+Z"); clicked => { root.undo(); } }
-            IconButton { icon: @image-url("../icons/solar-icons/undo-right-outline.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Redo · Ctrl+Shift+Z"); clicked => { root.redo(); } }
+            IconButton { icon: @image-url("../icons/phosphor/arrow-u-up-left.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Undo · Ctrl+Z"); clicked => { root.undo(); } }
+            IconButton { icon: @image-url("../icons/phosphor/arrow-u-up-right.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Redo · Ctrl+Shift+Z"); clicked => { root.redo(); } }
         }
     }
 }
@@ -113,7 +113,7 @@ export component ComposerAttachments inherits Rectangle {
                             y: 10px;
                             width: 16px;
                             height: 16px;
-                            source: @image-url("../icons/solar-icons/document-add-bold.svg");
+                            source: @image-url("../icons/phosphor/file-plus-fill.svg");
                             colorize: root.accent-color;
                             image-fit: contain;
                             accessible-role: none;
@@ -147,7 +147,7 @@ export component ComposerAttachments inherits Rectangle {
                             y: 4px;
                             width: 28px;
                             height: 28px;
-                            icon: @image-url("../icons/solar-icons/close-outline.svg");
+                            icon: @image-url("../icons/phosphor/x.svg");
                             icon-size: 12px;
                             icon-color: root.muted-color;
                             hover-background: root.control-hover-color;
@@ -214,7 +214,7 @@ export component ComposerFooter inherits Rectangle {
                 width: root.compact ? 96px : 106px;
                 height: 34px;
                 text: @tr("Send");
-                icon: @image-url("../icons/solar-icons/plane-bold.svg");
+                icon: @image-url("../icons/phosphor/paper-plane-tilt-fill.svg");
                 has-icon: true;
                 primary: true;
                 enabled: root.can-send;
@@ -227,7 +227,7 @@ export component ComposerFooter inherits Rectangle {
                 y: root.compact ? 5px : 11px;
                 width: root.compact ? 44px : 32px;
                 height: root.compact ? 44px : 32px;
-                icon: @image-url("../icons/solar-icons/paperclip-outline.svg");
+                icon: @image-url("../icons/phosphor/paperclip.svg");
                 icon-size: 17px;
                 icon-color: root.secondary-color;
                 hover-background: root.control-hover-color;
@@ -262,7 +262,7 @@ export component ComposerFooter inherits Rectangle {
                 y: root.compact ? 5px : 11px;
                 width: root.compact ? 44px : 32px;
                 height: root.compact ? 44px : 32px;
-                icon: @image-url("../icons/solar-icons/trash-bin-trash-bold.svg");
+                icon: @image-url("../icons/phosphor/trash-fill.svg");
                 icon-size: 16px;
                 icon-color: root.secondary-color;
                 hover-background: root.control-hover-color;

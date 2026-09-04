@@ -36,6 +36,7 @@ pub(super) fn refresh_from_source(
         }
         let mut state = state.borrow_mut();
         state.messages = page.messages;
+        state.labels = page.labels;
         // Exact folder totals arrive on the independent metadata worker. Use
         // the bounded page size immediately instead of blocking navigation on
         // a potentially large COUNT query.
@@ -90,12 +91,14 @@ pub(super) fn apply_background_mail_page(
 ) {
     let mail::MailPage {
         mut messages,
+        labels,
         mailboxes,
         next_cursor,
         ..
     } = page;
     let selection_removed = {
         let mut state = state.borrow_mut();
+        state.labels = labels;
         let selected_detail = state.selected_id.and_then(|selected_id| {
             state
                 .messages
@@ -184,6 +187,7 @@ pub(super) fn append_mail_page(
             .into_iter()
             .filter(|message| known_ids.insert(message.id)),
     );
+    state_mut.labels = page.labels;
     state_mut.next_cursor = page.next_cursor;
     drop(state_mut);
 
@@ -226,6 +230,24 @@ pub(super) fn select_message(
         .map(|core| (core, row)))
 }
 
+fn adjacent_message_ids(messages: &[MailMessage], selected_id: Option<i32>) -> (i32, i32) {
+    let Some(selected_index) =
+        selected_id.and_then(|id| messages.iter().position(|message| message.id == id))
+    else {
+        return (-1, -1);
+    };
+    let previous_id = selected_index
+        .checked_sub(1)
+        .and_then(|index| messages.get(index))
+        .map(|message| message.id)
+        .unwrap_or(-1);
+    let next_id = messages
+        .get(selected_index + 1)
+        .map(|message| message.id)
+        .unwrap_or(-1);
+    (previous_id, next_id)
+}
+
 pub(super) fn render_current(
     app: &AppWindow,
     state: &Rc<RefCell<InboxState>>,
@@ -251,6 +273,7 @@ pub(super) fn render_current(
         search_filter,
         total_count,
         inbox_count,
+        labels,
     ) = {
         let state = state.borrow();
         (
@@ -274,6 +297,7 @@ pub(super) fn render_current(
             state.search_filter.clone(),
             state.total_count,
             state.inbox_count,
+            state.labels.clone(),
         )
     };
 
@@ -317,20 +341,23 @@ pub(super) fn render_current(
     let email_rows = Rc::clone(&state.borrow().email_rows);
     reconcile_model_rows(
         &email_rows,
-        make_rows(visible, selected_id, &favicon_icons),
+        make_rows(visible, selected_id, &favicon_icons, &labels),
         |row| row.id,
     );
     app.set_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
         &mailboxes,
         &profile_avatar_images,
+        &labels,
     ))));
     app.set_account_mailboxes(ModelRc::new(VecModel::from(make_account_mailbox_rows(
         &mailboxes,
         &profile_avatar_images,
+        &labels,
     ))));
     app.set_unified_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
         &unified_mailboxes,
         &profile_avatar_images,
+        &labels,
     ))));
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
@@ -350,6 +377,10 @@ pub(super) fn render_current(
         visible_count < messages.len()
     });
     app.set_has_selected(selected_email.is_some());
+    apply_label_rows(app, &labels, selected_email.as_ref());
+    let (previous_email_id, next_email_id) = adjacent_message_ids(visible, selected_id);
+    app.set_previous_email_id(previous_email_id);
+    app.set_next_email_id(next_email_id);
     state.borrow().queue_warm_start_update();
     schedule_favicon_fetches(app, state, runtime, visible);
 
@@ -388,6 +419,64 @@ pub(super) fn render_current(
         ));
         Ok(())
     }
+}
+
+pub(super) fn apply_label_rows(
+    app: &AppWindow,
+    labels: &[flectar_mail_core::models::Label],
+    selected: Option<&MailMessage>,
+) {
+    let rows = make_label_rows(labels, selected, "");
+    app.set_selected_mail_label_count(rows.iter().filter(|label| label.applied).count() as i32);
+    app.set_mail_labels(ModelRc::new(VecModel::from(rows.clone())));
+    app.set_mail_label_results(ModelRc::new(VecModel::from(rows)));
+}
+
+pub(super) fn make_label_rows(
+    labels: &[flectar_mail_core::models::Label],
+    selected: Option<&MailMessage>,
+    query: &str,
+) -> Vec<MailLabelRow> {
+    let applied = selected
+        .map(|message| message.labels.as_slice())
+        .unwrap_or_default();
+    project_label_rows(labels, applied, query)
+}
+
+fn project_label_rows(
+    labels: &[flectar_mail_core::models::Label],
+    applied: &[i64],
+    query: &str,
+) -> Vec<MailLabelRow> {
+    let query = query.trim().to_lowercase();
+    labels
+        .iter()
+        .filter(|label| query.is_empty() || label.name.to_lowercase().contains(&query))
+        .filter_map(|label| {
+            Some(MailLabelRow {
+                id: i32::try_from(label.id).ok()?,
+                name: label.name.clone().into(),
+                color: label_color(&label.color),
+                applied: applied.contains(&label.id),
+                is_auto: label.is_auto,
+            })
+        })
+        .collect()
+}
+
+fn label_color(value: &str) -> slint::Color {
+    value
+        .strip_prefix('#')
+        .filter(|hex| hex.len() == 6)
+        .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+        .map(|rgb| {
+            slint::Color::from_rgb_u8(
+                ((rgb >> 16) & 0xff) as u8,
+                ((rgb >> 8) & 0xff) as u8,
+                (rgb & 0xff) as u8,
+            )
+        })
+        .unwrap_or_else(|| slint::Color::from_rgb_u8(107, 114, 128))
 }
 
 pub(super) fn filtered_messages(
@@ -530,6 +619,7 @@ pub(super) fn make_rows(
     messages: &[MailMessage],
     selected_id: Option<i32>,
     favicon_icons: &HashMap<String, FaviconImages>,
+    labels: &[flectar_mail_core::models::Label],
 ) -> Vec<EmailRow> {
     messages
         .iter()
@@ -553,10 +643,25 @@ pub(super) fn make_rows(
                 unread: email.unread,
                 starred: email.starred,
                 has_attachments: email.has_attachments,
+                label_summary: label_summary(&email.labels, labels).into(),
+                labels: ModelRc::new(VecModel::from(project_label_rows(
+                    labels,
+                    &email.labels,
+                    "",
+                ))),
                 selected: Some(email.id) == selected_id,
             }
         })
         .collect()
+}
+
+fn label_summary(ids: &[i64], labels: &[flectar_mail_core::models::Label]) -> String {
+    labels
+        .iter()
+        .filter(|label| ids.contains(&label.id))
+        .map(|label| label.name.as_str())
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 pub(super) fn slint_image(icon: &FaviconImage) -> Image {
@@ -609,12 +714,17 @@ pub(super) fn refresh_rows_only(
             .or_else(|| visible.first().map(|email| email.id))
     };
     state.borrow_mut().selected_id = selected_id;
-    let email_rows = Rc::clone(&state.borrow().email_rows);
+    let selected_email = selected_id.and_then(|id| visible.iter().find(|email| email.id == id));
+    let (email_rows, labels) = {
+        let state = state.borrow();
+        (Rc::clone(&state.email_rows), state.labels.clone())
+    };
     reconcile_model_rows(
         &email_rows,
-        make_rows(visible, selected_id, &favicon_icons),
+        make_rows(visible, selected_id, &favicon_icons, &labels),
         |row| row.id,
     );
+    apply_label_rows(app, &labels, selected_email);
     let selected_icon = selected_id
         .and_then(|id| visible.iter().find(|email| email.id == id))
         .and_then(|email| favicon_icons.get(&email.domain));
@@ -636,6 +746,7 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         total_count,
         inbox_count,
         profile_avatar_images,
+        labels,
     ) = {
         let state = state.borrow();
         (
@@ -656,6 +767,7 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
             state.total_count,
             state.inbox_count,
             state.profile_avatar_images.clone(),
+            state.labels.clone(),
         )
     };
     let visible_count = if using_core {
@@ -677,14 +789,17 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
     app.set_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
         &mailboxes,
         &profile_avatar_images,
+        &labels,
     ))));
     app.set_account_mailboxes(ModelRc::new(VecModel::from(make_account_mailbox_rows(
         &mailboxes,
         &profile_avatar_images,
+        &labels,
     ))));
     app.set_unified_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
         &unified_mailboxes,
         &profile_avatar_images,
+        &labels,
     ))));
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
@@ -853,6 +968,7 @@ pub(super) fn schedule_profile_avatar_fetches(
 pub(super) fn make_mailbox_rows(
     mailboxes: &[MailboxEntry],
     avatars: &HashMap<i64, ProfileAvatarImages>,
+    labels: &[flectar_mail_core::models::Label],
 ) -> Vec<MailboxRow> {
     mailboxes
         .iter()
@@ -860,6 +976,13 @@ pub(super) fn make_mailbox_rows(
             let avatar = mailbox
                 .is_account
                 .then(|| avatars.get(&mailbox.account_id))
+                .flatten();
+            let custom_color = (!mailbox.is_account)
+                .then(|| {
+                    labels
+                        .iter()
+                        .find(|label| label.name.eq_ignore_ascii_case(&mailbox.label))
+                })
                 .flatten();
             MailboxRow {
                 label: mailbox.label.clone().into(),
@@ -873,6 +996,10 @@ pub(super) fn make_mailbox_rows(
                 has_avatar: avatar.is_some(),
                 is_account: mailbox.is_account,
                 count: mailbox.count.clone().into(),
+                color: custom_color
+                    .map(|label| label_color(&label.color))
+                    .unwrap_or_default(),
+                has_custom_color: custom_color.is_some(),
             }
         })
         .collect()
@@ -881,8 +1008,9 @@ pub(super) fn make_mailbox_rows(
 pub(super) fn make_account_mailbox_rows(
     mailboxes: &[MailboxEntry],
     avatars: &HashMap<i64, ProfileAvatarImages>,
+    labels: &[flectar_mail_core::models::Label],
 ) -> Vec<MailboxRow> {
-    make_mailbox_rows(mailboxes, avatars)
+    make_mailbox_rows(mailboxes, avatars, labels)
         .into_iter()
         .filter(|mailbox| mailbox.is_account)
         .collect()
@@ -910,6 +1038,7 @@ mod tests {
             unread: false,
             starred: false,
             has_attachments: false,
+            labels: Vec::new(),
             html: None,
             body_pending: true,
             sender_verification: String::new(),
@@ -949,5 +1078,121 @@ mod tests {
         let (merged, retained_tail) = merge_refreshed_mail_head(&current, refreshed, None);
         assert!(!retained_tail);
         assert_eq!(merged.len(), 12);
+    }
+
+    #[test]
+    fn adjacent_message_ids_follow_visible_list_order() {
+        let messages = [10, 20, 30].into_iter().map(message).collect::<Vec<_>>();
+
+        assert_eq!(adjacent_message_ids(&messages, Some(10)), (-1, 20));
+        assert_eq!(adjacent_message_ids(&messages, Some(20)), (10, 30));
+        assert_eq!(adjacent_message_ids(&messages, Some(30)), (20, -1));
+        assert_eq!(adjacent_message_ids(&messages, None), (-1, -1));
+        assert_eq!(adjacent_message_ids(&messages, Some(99)), (-1, -1));
+    }
+
+    #[test]
+    fn label_summary_uses_label_order_and_ignores_unknown_ids() {
+        let labels = vec![
+            flectar_mail_core::models::Label {
+                id: 2,
+                name: "Work".into(),
+                color: "#2563eb".into(),
+                keyword: "Work".into(),
+                position: 0,
+                is_auto: false,
+            },
+            flectar_mail_core::models::Label {
+                id: 4,
+                name: "Follow up".into(),
+                color: "#7c3aed".into(),
+                keyword: "Follow_up".into(),
+                position: 1,
+                is_auto: false,
+            },
+        ];
+
+        assert_eq!(label_summary(&[4, 99, 2], &labels), "Work · Follow up");
+    }
+
+    #[test]
+    fn label_search_is_case_insensitive_and_keeps_membership() {
+        let mut selected = message(12);
+        selected.labels = vec![4];
+        let labels = vec![
+            flectar_mail_core::models::Label {
+                id: 2,
+                name: "Work".into(),
+                color: "#2563eb".into(),
+                keyword: "Work".into(),
+                position: 0,
+                is_auto: false,
+            },
+            flectar_mail_core::models::Label {
+                id: 4,
+                name: "Follow Up".into(),
+                color: "#7c3aed".into(),
+                keyword: "Follow_Up".into(),
+                position: 1,
+                is_auto: false,
+            },
+        ];
+
+        let results = make_label_rows(&labels, Some(&selected), "FOLLOW");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "Follow Up");
+        assert!(results[0].applied);
+    }
+
+    #[test]
+    fn mail_rows_keep_colored_labels_for_list_chips() {
+        let mut email = message(12);
+        email.labels = vec![4];
+        let labels = vec![flectar_mail_core::models::Label {
+            id: 4,
+            name: "Follow Up".into(),
+            color: "#7c3aed".into(),
+            keyword: "Follow_Up".into(),
+            position: 0,
+            is_auto: false,
+        }];
+
+        let rows = make_rows(&[email], None, &HashMap::new(), &labels);
+        assert_eq!(rows[0].labels.row_count(), 1);
+        let label = rows[0].labels.row_data(0).expect("projected label");
+        assert_eq!(label.name, "Follow Up");
+        assert_eq!(label.color, slint::Color::from_rgb_u8(0x7c, 0x3a, 0xed));
+    }
+
+    #[test]
+    fn matching_sidebar_folder_uses_the_label_color() {
+        let mailboxes = vec![MailboxEntry {
+            account_id: 1,
+            label: "Projects".into(),
+            scope: "Account / Projects".into(),
+            context: "Account".into(),
+            detail: String::new(),
+            avatar: String::new(),
+            is_account: false,
+            count: String::new(),
+        }];
+        let labels = vec![flectar_mail_core::models::Label {
+            id: 7,
+            name: "Projects".into(),
+            color: "#22c55e".into(),
+            keyword: "Projects".into(),
+            position: 0,
+            is_auto: false,
+        }];
+
+        let rows = make_mailbox_rows(&mailboxes, &HashMap::new(), &labels);
+        assert!(rows[0].has_custom_color);
+        assert_eq!(rows[0].color, slint::Color::from_rgb_u8(0x22, 0xc5, 0x5e));
+    }
+
+    #[test]
+    fn label_color_parses_hex_and_has_a_safe_fallback() {
+        assert_eq!(label_color("#123abc"), slint::Color::from_rgb_u8(0x12, 0x3a, 0xbc));
+        assert_eq!(label_color("invalid"), slint::Color::from_rgb_u8(107, 114, 128));
     }
 }

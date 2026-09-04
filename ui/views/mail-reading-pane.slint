@@ -1,12 +1,91 @@
-import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
-import { EmailLink, EmailTile } from "../models.slint";
+import { HorizontalBox, ListView, ScrollView, VerticalBox } from "std-widgets.slint";
+import { EmailLink, EmailTile, MailLabelRow } from "../models.slint";
 import { Avatar } from "../components/avatar.slint";
 import { Button } from "../components/button.slint";
-import { IconButton, TextEdit, ToolbarIconButton } from "../components/controls.slint";
+import { IconButton, LineEdit, TextEdit, ToolbarIconButton } from "../components/controls.slint";
 import { EmailLinkContextArea } from "../components/email-link-context-area.slint";
 import { RenderingInfoDialog } from "../dialogs/rendering-info-dialog.slint";
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics } from "../design-system.slint";
+
+component MailLabelChip inherits Rectangle {
+    in property <string> name;
+    in property <color> label-color;
+    in property <color> text-color;
+    in property <color> chip-border-color;
+
+    min-width: chip-name.preferred-width + 28px;
+    preferred-width: self.min-width;
+    max-width: 180px;
+    height: 24px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.chip-border-color;
+    background: root.label-color.transparentize(0.88);
+
+    Image {
+        x: 7px;
+        y: 6px;
+        width: 12px;
+        height: 12px;
+        source: @image-url("../icons/phosphor/folder-simple-fill.svg");
+        colorize: root.label-color;
+        image-fit: contain;
+        accessible-role: none;
+    }
+    chip-name := Text {
+        x: 23px;
+        width: parent.width - 27px;
+        height: parent.height;
+        text: root.name;
+        color: root.text-color;
+        font-size: TypeScale.caption;
+        font-weight: 600;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+}
+
+component LabelColorSwatch inherits Rectangle {
+    in property <color> swatch-color;
+    in property <bool> selected: false;
+    in property <string> accessible-name;
+    callback chosen;
+
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? root.swatch-color : root.swatch-color.transparentize(0.5);
+    background: swatch-hit.has-hover ? root.swatch-color.transparentize(0.8) : transparent;
+
+    Rectangle {
+        x: 7px;
+        y: 7px;
+        width: 16px;
+        height: 16px;
+        border-radius: 5px;
+        background: root.swatch-color;
+
+        if root.selected : Rectangle {
+            x: 5px;
+            y: 5px;
+            width: 6px;
+            height: 6px;
+            border-radius: 3px;
+            background: white;
+        }
+    }
+
+    swatch-hit := TouchArea {
+        accessible-role: radio-button;
+        accessible-label: root.accessible-name;
+        accessible-checked: root.selected;
+        accessible-action-default => { root.chosen(); }
+        clicked => { root.chosen(); }
+        mouse-cursor: pointer;
+    }
+}
 
 export component MailReadingPane inherits Rectangle {
     in property <bool> compact: false;
@@ -17,6 +96,9 @@ export component MailReadingPane inherits Rectangle {
     in property <length> window-width;
     in property <[EmailTile]> email_tiles: [];
     in property <[EmailLink]> email_links: [];
+    in property <[MailLabelRow]> mail_labels: [];
+    in property <[MailLabelRow]> mail-label-results: [];
+    in property <int> selected-label-count: 0;
     in property <string> selected_sender: "";
     in property <string> selected_address: "";
     in property <string> selected_subject: "";
@@ -33,6 +115,8 @@ export component MailReadingPane inherits Rectangle {
     in property <string> clipboard_request: "";
     in property <int> clipboard_request_id: 0;
     in property <bool> has_selected: true;
+    in property <int> previous-email-id: -1;
+    in property <int> next-email-id: -1;
     in property <bool> selected_starred: false;
     in property <bool> selected_unread: false;
     in property <bool> selected_is_draft: false;
@@ -59,6 +143,10 @@ export component MailReadingPane inherits Rectangle {
     in property <color> surface-raised;
     in property <color> title-color;
     callback message_action(string);
+    callback toggle-mail-label(int, bool);
+    callback save-mail-label(int, string, color);
+    callback search-mail-labels(string);
+    callback select_email(int);
     callback compose_message_action(string);
     callback close_preview();
     callback print_message();
@@ -72,6 +160,12 @@ export component MailReadingPane inherits Rectangle {
     callback load-remote-images-for-message();
 
     private property <string> display-subject: root.selected_subject == "" ? @tr("(No subject)") : root.selected_subject;
+    private property <bool> label-editor-open: false;
+    private property <string> label-search-query: "";
+    private property <int> label-editor-id: -1;
+    private property <bool> label-editor-is-auto: false;
+    private property <string> new-label-name: "";
+    private property <color> new-label-color: #4a86e8;
 
     changed clipboard-request-id => {
         if root.clipboard-request-id > 0 {
@@ -105,7 +199,7 @@ export component MailReadingPane inherits Rectangle {
                             ToolbarIconButton {
                                 visible: root.has_selected;
                                 compact: root.compact;
-                                icon: root.compact ? @image-url("../icons/solar-icons/arrow-left-outline.svg") : @image-url("../icons/solar-icons/close-outline.svg");
+                                icon: root.compact ? @image-url("../icons/phosphor/arrow-left.svg") : @image-url("../icons/phosphor/x.svg");
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
@@ -113,13 +207,32 @@ export component MailReadingPane inherits Rectangle {
                                 accessible-id: "message-back-button";
                                 clicked => { root.close_preview(); }
                             }
-                            if !root.compact : Text { text: root.selected_label; color: root.secondary-text; font-size: TypeScale.caption; font-weight: 700; vertical-alignment: center; }
+                            if !root.compact : ToolbarIconButton {
+                                interactive: root.previous-email-id >= 0;
+                                icon: @image-url("../icons/phosphor/caret-left.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Previous message");
+                                accessible-id: "previous-message-button";
+                                clicked => { root.select_email(root.previous-email-id); }
+                            }
+                            if !root.compact : ToolbarIconButton {
+                                interactive: root.next-email-id >= 0;
+                                icon: @image-url("../icons/phosphor/caret-right.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.control-bg;
+                                hover-background: root.muted-control-bg;
+                                tooltip-text: @tr("Next message");
+                                accessible-id: "next-message-button";
+                                clicked => { root.select_email(root.next-email-id); }
+                            }
                             Rectangle { horizontal-stretch: 1; }
                             ToolbarIconButton {
                                 visible: !root.selected_is_draft;
                                 interactive: root.has_selected;
                                 compact: root.compact;
-                                icon: @image-url("../icons/solar-icons/archive-outline.svg");
+                                icon: @image-url("../icons/phosphor/archive.svg");
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
@@ -130,7 +243,7 @@ export component MailReadingPane inherits Rectangle {
                                 visible: !root.selected_is_draft;
                                 interactive: root.has_selected;
                                 compact: root.compact;
-                                icon: root.selected_starred ? @image-url("../icons/solar-icons/star-bold.svg") : @image-url("../icons/solar-icons/star-outline.svg");
+                                icon: root.selected_starred ? @image-url("../icons/phosphor/star-fill.svg") : @image-url("../icons/phosphor/star.svg");
                                 icon-color: root.selected_starred ? root.accent : root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
@@ -143,7 +256,7 @@ export component MailReadingPane inherits Rectangle {
                                 visible: !root.selected_is_draft;
                                 interactive: root.has_selected;
                                 compact: root.compact;
-                                icon: root.selected_unread ? @image-url("../icons/solar-icons/letter-unread-bold.svg") : @image-url("../icons/solar-icons/letter-unread-outline.svg");
+                                icon: root.selected_unread ? @image-url("../icons/phosphor/envelope-fill.svg") : @image-url("../icons/phosphor/envelope-open.svg");
                                 icon-color: root.selected_unread ? root.accent : root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
@@ -154,7 +267,7 @@ export component MailReadingPane inherits Rectangle {
                             }
                             if !root.compact && !root.selected_is_draft : ToolbarIconButton {
                                 interactive: root.has_selected;
-                                icon: @image-url("../icons/solar-icons/danger-triangle-outline.svg");
+                                icon: @image-url("../icons/phosphor/warning.svg");
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
@@ -164,12 +277,197 @@ export component MailReadingPane inherits Rectangle {
                             ToolbarIconButton {
                                 interactive: root.has_selected;
                                 compact: root.compact;
-                                icon: @image-url("../icons/solar-icons/trash-bin-trash-outline.svg");
+                                icon: @image-url("../icons/phosphor/trash.svg");
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
                                 tooltip-text: @tr("Move to trash");
                                 clicked => { root.message_action("trash"); }
+                            }
+                            label-action := Rectangle {
+                                visible: !root.selected_is_draft;
+                                width: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
+                                height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
+                                label-button := ToolbarIconButton {
+                                    compact: root.compact;
+                                    width: parent.width;
+                                    height: parent.height;
+                                    interactive: root.has_selected;
+                                    icon: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                                    icon-color: root.selected-label-count > 0 ? root.accent : root.secondary-text;
+                                    idle-background: root.control-bg;
+                                    hover-background: root.muted-control-bg;
+                                    active-background: root.accent-soft;
+                                    active: root.selected-label-count > 0;
+                                    tooltip-text: @tr("Manage labels");
+                                    accessible-id: "message-label-button";
+                                    clicked => {
+                                        root.label-search-query = "";
+                                        root.search-mail-labels("");
+                                        label-popup.show();
+                                    }
+                                }
+
+                                label-popup := PopupWindow {
+                                    x: root.compact ? -232px : -252px;
+                                    y: parent.height + 4px;
+                                    width: 288px;
+                                    height: 330px;
+                                    close-policy: close-on-click-outside;
+                                    forward-focus: label-search-field;
+
+                                    Rectangle {
+                                        border-radius: 10px;
+                                        border-width: 1px;
+                                        border-color: root.border;
+                                        background: root.surface-raised;
+                                        drop-shadow-blur: 18px;
+                                        drop-shadow-offset-y: 5px;
+                                        drop-shadow-color: #0000002e;
+                                        clip: true;
+
+                                        VerticalBox {
+                                            padding: 8px;
+                                            spacing: 8px;
+
+                                            Text {
+                                                height: 28px;
+                                                text: @tr("Labels");
+                                                color: root.title-color;
+                                                font-size: TypeScale.subtitle;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+
+                                            label-search-field := LineEdit {
+                                                height: 36px;
+                                                text <=> root.label-search-query;
+                                                placeholder-text: @tr("Search labels");
+                                                show-leading-icon: true;
+                                                leading-icon: @image-url("../icons/phosphor/magnifying-glass.svg");
+                                                leading-icon-color: root.muted-text;
+                                                edited(value) => { root.search-mail-labels(value); }
+                                            }
+
+                                            Rectangle { height: 1px; background: root.border-subtle; }
+
+                                            Rectangle {
+                                                vertical-stretch: 1;
+                                                background: transparent;
+
+                                                label-list := ListView {
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    horizontal-scrollbar-policy: always-off;
+                                                    accessible-label: @tr("Available labels");
+                                                    accessible-item-count: root.mail-label-results.length;
+
+                                                    for label[index] in root.mail-label-results : Rectangle {
+                                                        width: label-list.visible-width;
+                                                        height: 42px;
+                                                        border-radius: 6px;
+                                                        background: label-hit.has-hover ? root.control-bg : transparent;
+
+                                                        Image {
+                                                            x: 7px;
+                                                            y: 13px;
+                                                            width: 16px;
+                                                            height: 16px;
+                                                            source: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                                                            colorize: label.color;
+                                                            image-fit: contain;
+                                                            accessible-role: none;
+                                                        }
+                                                        Text {
+                                                            x: 30px;
+                                                            width: parent.width - 88px;
+                                                            height: parent.height;
+                                                            text: label.name;
+                                                            color: root.heading;
+                                                            font-size: TypeScale.body;
+                                                            font-weight: label.applied ? 600 : 500;
+                                                            overflow: elide;
+                                                            vertical-alignment: center;
+                                                        }
+                                                        Text {
+                                                            x: parent.width - 58px;
+                                                            width: 22px;
+                                                            height: parent.height;
+                                                            text: label.applied ? "✓" : "";
+                                                            color: root.accent;
+                                                            font-size: TypeScale.body-large;
+                                                            font-weight: 700;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                        label-hit := TouchArea {
+                                                            accessible-role: checkbox;
+                                                            accessible-label: label.name;
+                                                            accessible-checked: label.applied;
+                                                            accessible-item-index: index;
+                                                            accessible-action-default => {
+                                                                root.toggle-mail-label(label.id, !label.applied);
+                                                                label-popup.close();
+                                                            }
+                                                            clicked => {
+                                                                root.toggle-mail-label(label.id, !label.applied);
+                                                                label-popup.close();
+                                                            }
+                                                            mouse-cursor: pointer;
+                                                        }
+                                                        IconButton {
+                                                            x: parent.width - 34px;
+                                                            y: 7px;
+                                                            width: 28px;
+                                                            height: 28px;
+                                                            icon-size: 15px;
+                                                            icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
+                                                            icon-color: root.muted-text;
+                                                            ghost: true;
+                                                            hover-background: root.muted-control-bg;
+                                                            tooltip-text: @tr("Edit label");
+                                                            clicked => {
+                                                                root.label-editor-id = label.id;
+                                                                root.label-editor-is-auto = label.is_auto;
+                                                                root.new-label-name = label.name;
+                                                                root.new-label-color = label.color;
+                                                                root.label-editor-open = true;
+                                                                label-popup.close();
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                if root.mail-label-results.length == 0 : Text {
+                                                    width: parent.width;
+                                                    height: 64px;
+                                                    text: @tr("No matching labels");
+                                                    color: root.muted-text;
+                                                    font-size: TypeScale.body;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+                                            }
+
+                                            Rectangle { height: 1px; background: root.border-subtle; }
+
+                                            Button {
+                                                height: 34px;
+                                                text: @tr("Create label…");
+                                                has-icon: true;
+                                                icon: @image-url("../icons/phosphor/plus.svg");
+                                                clicked => {
+                                                    root.label-editor-id = -1;
+                                                    root.label-editor-is-auto = false;
+                                                    root.new-label-name = root.label-search-query;
+                                                    root.new-label-color = #4a86e8;
+                                                    root.label-editor-open = true;
+                                                    label-popup.close();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             more-menu := ContextMenuArea {
                                 width: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
@@ -179,7 +477,7 @@ export component MailReadingPane inherits Rectangle {
                                     compact: root.compact;
                                     width: parent.width;
                                     height: parent.height;
-                                    icon: @image-url("../icons/solar-icons/menu-dots-bold.svg");
+                                    icon: @image-url("../icons/phosphor/dots-three.svg");
                                     icon-color: root.secondary-text;
                                     idle-background: root.control-bg;
                                     hover-background: root.muted-control-bg;
@@ -223,7 +521,7 @@ export component MailReadingPane inherits Rectangle {
                         vertical-stretch: 1;
                         padding-top: root.compact ? 14px : 20px;
                         padding-right: root.compact ? 12px : 24px;
-                        padding-bottom: root.compact ? 10px : 14px;
+                        padding-bottom: 0px;
                         padding-left: root.compact ? 12px : 24px;
                         spacing: 0px;
 
@@ -245,6 +543,21 @@ export component MailReadingPane inherits Rectangle {
                         }
 
                         Rectangle { height: 14px; }
+
+                        if root.selected-label-count > 0 : HorizontalBox {
+                            height: 24px;
+                            spacing: 6px;
+                            alignment: start;
+                            for label in root.mail_labels : MailLabelChip {
+                                visible: label.applied;
+                                name: label.name;
+                                label-color: label.color;
+                                text-color: root.heading;
+                                chip-border-color: root.border-subtle;
+                            }
+                        }
+
+                        if root.selected-label-count > 0 : Rectangle { height: 10px; }
 
                         HorizontalBox {
                             min-height: 44px;
@@ -290,7 +603,7 @@ export component MailReadingPane inherits Rectangle {
                                         y: 3px;
                                         width: 18px;
                                         height: 18px;
-                                        source: @image-url("../icons/solar-icons/verified-check-bold.svg");
+                                        source: @image-url("../icons/phosphor/check-circle-fill.svg");
                                         colorize: root.accent;
                                         image-fit: contain;
                                         accessible-label: root.selected_sender_verification == "brand"
@@ -562,63 +875,85 @@ export component MailReadingPane inherits Rectangle {
 
                         Rectangle { height: root.compact ? 10px : 12px; }
 
+                    }
+
+                    // The action footer is a sibling of the padded message
+                    // content so its surface and divider span the whole pane.
+                    action-footer := Rectangle {
+                        min-height: root.compact ? 64px : 56px;
+                        preferred-height: root.compact ? 64px : 56px;
+                        max-height: root.compact ? 64px : 56px;
+                        background: root.surface;
+
+                        Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: 1px;
+                            background: root.border-subtle;
+                        }
+
                         // Keep the three essential conversation actions visible
                         // instead of hiding them behind the overflow menu.
                         HorizontalBox {
-                            height: root.compact ? 40px : 32px;
-                            spacing: 6px;
+                            padding-top: root.compact ? 10px : 12px;
+                            padding-right: root.compact ? 12px : 24px;
+                            padding-bottom: root.compact ? 10px : 12px;
+                            padding-left: root.compact ? 12px : 24px;
+                            spacing: root.compact ? 6px : 8px;
                             alignment: start;
+                            cross-axis-alignment: center;
                             Button {
                                 visible: !root.selected_is_draft;
-                                height: parent.height;
-                                border-radius: parent.height / 2;
+                                height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Reply");
+                                has-icon: true;
+                                icon: @image-url("../icons/phosphor/arrow-bend-up-left.svg");
                                 enabled: root.has_selected;
                                 clicked => { root.compose_message_action("reply"); }
                             }
                             Button {
                                 visible: !root.selected_is_draft;
-                                height: parent.height;
-                                border-radius: parent.height / 2;
+                                height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Reply all");
+                                has-icon: true;
+                                icon: @image-url("../icons/phosphor/arrow-bend-double-up-left.svg");
                                 enabled: root.has_selected;
                                 clicked => { root.compose_message_action("reply_all"); }
                             }
                             Button {
                                 visible: !root.selected_is_draft;
-                                height: parent.height;
-                                border-radius: parent.height / 2;
+                                height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Forward");
+                                has-icon: true;
+                                icon: @image-url("../icons/phosphor/arrow-bend-up-right.svg");
                                 enabled: root.has_selected;
                                 clicked => { root.compose_message_action("forward"); }
                             }
                             Button {
                                 visible: root.selected_is_draft;
-                                height: parent.height;
-                                border-radius: parent.height / 2;
+                                height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Continue editing");
                                 has-icon: true;
-                                icon: @image-url("../icons/solar-icons/pen-new-square-bold.svg");
+                                icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
                                 primary: true;
                                 enabled: root.has_selected;
                                 clicked => { root.compose_message_action("edit_draft"); }
                             }
                             Rectangle { horizontal-stretch: 1; }
                             if !root.compact && !root.selected_is_draft : Button {
-                                height: parent.height;
-                                border-radius: parent.height / 2;
+                                height: 32px;
                                 text: @tr("Open in browser");
+                                has-icon: true;
+                                icon: @image-url("../icons/phosphor/browser.svg");
                                 enabled: root.has_selected;
                                 clicked => { root.open_message_in_browser(); }
                             }
                             if !root.compact && !root.selected_is_draft : IconButton {
-                                width: parent.height;
-                                height: parent.height;
-                                border-radius: parent.height / 2;
                                 border-width: 1px;
                                 border-color: root.border;
                                 icon-size: 16px;
-                                icon: @image-url("../icons/solar-icons/info-circle-bold.svg");
+                                icon: @image-url("../icons/phosphor/info-fill.svg");
                                 icon-color: root.secondary-text;
                                 idle-background: root.surface;
                                 hover-background: root.control-bg;
@@ -629,16 +964,6 @@ export component MailReadingPane inherits Rectangle {
                                 clicked => { root.rendering_info_open = true; }
                             }
                         }
-
-                        // Keep the rounded controls clear of the window edge.
-                        // A constrained spacer cannot be squeezed away when
-                        // the message viewport consumes the remaining height.
-                        Rectangle {
-                            min-height: root.compact ? 10px : 12px;
-                            preferred-height: root.compact ? 10px : 12px;
-                            max-height: root.compact ? 10px : 12px;
-                        }
-
                     }
                 }
 
@@ -669,6 +994,92 @@ export component MailReadingPane inherits Rectangle {
                         spacing: 6px;
                         Text { text: @tr("No message selected"); color: root.heading; font-size: TypeScale.heading-large; font-weight: 700; }
                         Text { text: @tr("Choose an email to read it here."); color: root.muted-text; font-size: TypeScale.secondary; }
+                    }
+                }
+
+                if root.label-editor-open : Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    background: #00000055;
+
+                    TouchArea {
+                        width: parent.width;
+                        height: parent.height;
+                        clicked => { root.label-editor-open = false; }
+                    }
+
+                    Rectangle {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: min(360px, parent.width - 32px);
+                        height: 250px;
+                        border-radius: 10px;
+                        border-width: 1px;
+                        border-color: root.border;
+                        background: root.surface-raised;
+
+                        VerticalBox {
+                            padding: 20px;
+                            spacing: 12px;
+                            Text {
+                                text: root.label-editor-id < 0 ? @tr("Create label") : @tr("Edit label");
+                                color: root.title-color;
+                                font-size: TypeScale.heading;
+                                font-weight: 700;
+                            }
+                            LineEdit {
+                                text <=> root.new-label-name;
+                                placeholder-text: @tr("Label name");
+                                enabled: !root.label-editor-is-auto;
+                            }
+                            VerticalBox {
+                                height: 52px;
+                                spacing: 6px;
+                                Text {
+                                    height: 16px;
+                                    text: @tr("Color");
+                                    color: root.muted-text;
+                                    font-size: TypeScale.caption;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                                HorizontalBox {
+                                    height: 30px;
+                                    spacing: 6px;
+                                    alignment: start;
+                                    LabelColorSwatch { swatch-color: #4a86e8; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Blue"); chosen => { root.new-label-color = self.swatch-color; } }
+                                    LabelColorSwatch { swatch-color: #a479e2; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Purple"); chosen => { root.new-label-color = self.swatch-color; } }
+                                    LabelColorSwatch { swatch-color: #f691b3; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Pink"); chosen => { root.new-label-color = self.swatch-color; } }
+                                    LabelColorSwatch { swatch-color: #fb4c2f; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Red"); chosen => { root.new-label-color = self.swatch-color; } }
+                                    LabelColorSwatch { swatch-color: #ffad46; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Amber"); chosen => { root.new-label-color = self.swatch-color; } }
+                                    LabelColorSwatch { swatch-color: #16a765; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Green"); chosen => { root.new-label-color = self.swatch-color; } }
+                                    LabelColorSwatch { swatch-color: #43d692; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Teal"); chosen => { root.new-label-color = self.swatch-color; } }
+                                    LabelColorSwatch { swatch-color: #666666; selected: root.new-label-color == self.swatch-color; accessible-name: @tr("Slate"); chosen => { root.new-label-color = self.swatch-color; } }
+                                }
+                            }
+                            HorizontalBox {
+                                height: 34px;
+                                spacing: 8px;
+                                alignment: end;
+                                Button {
+                                    height: parent.height;
+                                    text: @tr("Cancel");
+                                    clicked => { root.label-editor-open = false; }
+                                }
+                                Button {
+                                    height: parent.height;
+                                    text: root.label-editor-id < 0 ? @tr("Create") : @tr("Save");
+                                    primary: true;
+                                    enabled: root.new-label-name != "";
+                                    clicked => {
+                                        root.save-mail-label(root.label-editor-id, root.new-label-name, root.new-label-color);
+                                        root.label-editor-open = false;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

@@ -47,6 +47,8 @@ pub(crate) struct WarmStartMessage {
     pub(crate) unread: bool,
     pub(crate) starred: bool,
     pub(crate) has_attachments: bool,
+    #[serde(default)]
+    pub(crate) labels: Vec<i64>,
     pub(crate) sender_verification: String,
 }
 
@@ -68,6 +70,7 @@ impl From<&mail::MailMessage> for WarmStartMessage {
             unread: message.unread,
             starred: message.starred,
             has_attachments: message.has_attachments,
+            labels: message.labels.clone(),
             sender_verification: message.sender_verification.clone(),
         }
     }
@@ -92,6 +95,7 @@ impl From<WarmStartMessage> for mail::MailMessage {
             unread: message.unread,
             starred: message.starred,
             has_attachments: message.has_attachments,
+            labels: message.labels,
             html: None,
             body_pending: true,
             sender_verification: message.sender_verification,
@@ -589,6 +593,7 @@ mod warm_start_tests {
             unread: true,
             starred: false,
             has_attachments: false,
+            labels: Vec::new(),
             html: Some("<p>body must not enter warm cache</p>".into()),
             body_pending: false,
             sender_verification: "domain".into(),

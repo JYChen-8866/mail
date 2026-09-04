@@ -15,6 +15,7 @@ export component LineEdit inherits Rectangle {
     callback edited(string);
     callback select-all;
     callback copy;
+    forward-focus: editor;
 
     height: 36px;
     min-width: 80px;
@@ -288,6 +289,20 @@ export component IconButton inherits Rectangle {
             vertical-alignment: center;
         }
     }
+}
+
+// Primary actions that replace a collapsed workspace sidebar float above the
+// list surface. Keeping the geometry here makes mail and contacts identical.
+export component FloatingActionButton inherits IconButton {
+    width: LayoutMetrics.touch-target + 8px;
+    height: LayoutMetrics.touch-target + 8px;
+    border-radius: self.width / 2;
+    icon-size: 22px;
+    primary: true;
+    tooltip-above: true;
+    drop-shadow-blur: 12px;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-color: #00000040;
 }
 
 // Canonical app-bar action geometry. Toolbars opt into this component instead

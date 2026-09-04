@@ -144,8 +144,8 @@ export component SidebarSectionHeader inherits Rectangle {
         width: 12px;
         height: 12px;
         source: root.open
-            ? @image-url("../icons/solar-icons/alt-arrow-down-outline.svg")
-            : @image-url("../icons/solar-icons/alt-arrow-right-outline.svg");
+            ? @image-url("../icons/phosphor/caret-down.svg")
+            : @image-url("../icons/phosphor/caret-right.svg");
         colorize: root.muted-color;
         image-fit: contain;
         accessible-role: none;
@@ -250,7 +250,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
             height: LayoutMetrics.sidebar-action-height;
             horizontal-stretch: 1;
             text: @tr("New email");
-            icon: @image-url("../icons/solar-icons/pen-new-square-bold.svg");
+            icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
             has-icon: true;
             primary: true;
             clicked => { root.compose(); }
@@ -277,7 +277,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
 
                 unified-section := SidebarSectionHeader {
                     label: @tr("All Inboxes");
-                    icon: @image-url("../icons/solar-icons/inbox-archive-bold.svg");
+                    icon: @image-url("../icons/phosphor/stack-fill.svg");
                     sidebar-background: root.background-color;
                     hover-background: root.hover-background;
                     body-color: root.title-color;
@@ -295,7 +295,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         label: @tr("Inbox");
                         count: root.unified-count;
                         scope: "Unified Inbox";
-                        icon: @image-url("../icons/solar-icons/inbox-bold.svg");
+                        icon: @image-url("../icons/phosphor/tray-fill.svg");
                         selected: root.selected-scope == "Unified Inbox";
                         prominent: true;
                         row-height: 32px;
@@ -312,12 +312,12 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         label: mailbox.label;
                         count: mailbox.count;
                         scope: mailbox.scope;
-                        icon: mailbox.scope == "Unified Starred" ? @image-url("../icons/solar-icons/star-bold.svg")
-                            : mailbox.scope == "Unified Sent" ? @image-url("../icons/solar-icons/plane-bold.svg")
-                            : mailbox.scope == "Unified Spam" ? @image-url("../icons/solar-icons/danger-triangle-bold.svg")
-                            : mailbox.scope == "Unified Trash" ? @image-url("../icons/solar-icons/trash-bin-trash-bold.svg")
-                            : mailbox.scope == "Unified Archive" ? @image-url("../icons/solar-icons/archive-bold.svg")
-                            : @image-url("../icons/solar-icons/document-add-bold.svg");
+                        icon: mailbox.scope == "Unified Starred" ? @image-url("../icons/phosphor/star-fill.svg")
+                            : mailbox.scope == "Unified Sent" ? @image-url("../icons/phosphor/paper-plane-tilt-fill.svg")
+                            : mailbox.scope == "Unified Spam" ? @image-url("../icons/phosphor/warning-fill.svg")
+                            : mailbox.scope == "Unified Trash" ? @image-url("../icons/phosphor/trash-fill.svg")
+                            : mailbox.scope == "Unified Archive" ? @image-url("../icons/phosphor/archive-fill.svg")
+                            : @image-url("../icons/phosphor/file-plus-fill.svg");
                         selected: mailbox.scope == root.selected-scope;
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
@@ -383,14 +383,15 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             label: mailbox.label;
                             count: mailbox.count;
                             scope: mailbox.scope;
-                            icon: mailbox.label == "Inbox" ? @image-url("../icons/solar-icons/inbox-bold.svg")
-                                : mailbox.label == "Starred" ? @image-url("../icons/solar-icons/star-bold.svg")
-                                : mailbox.label == "Sent" ? @image-url("../icons/solar-icons/plane-bold.svg")
-                                : mailbox.label == "Archive" ? @image-url("../icons/solar-icons/archive-bold.svg")
-                                : mailbox.label == "Spam" ? @image-url("../icons/solar-icons/danger-triangle-bold.svg")
-                                : mailbox.label == "Trash" ? @image-url("../icons/solar-icons/trash-bin-trash-bold.svg")
-                                : mailbox.label == "Drafts" ? @image-url("../icons/solar-icons/document-add-bold.svg")
-                                : @image-url("../icons/solar-icons/folder-2-bold.svg");
+                            icon: mailbox.label == "Inbox" ? @image-url("../icons/phosphor/tray-fill.svg")
+                                : mailbox.label == "Starred" ? @image-url("../icons/phosphor/star-fill.svg")
+                                : mailbox.label == "Sent" ? @image-url("../icons/phosphor/paper-plane-tilt-fill.svg")
+                                : mailbox.label == "Archive" ? @image-url("../icons/phosphor/archive-fill.svg")
+                                : mailbox.label == "Spam" ? @image-url("../icons/phosphor/warning-fill.svg")
+                                : mailbox.label == "Trash" ? @image-url("../icons/phosphor/trash-fill.svg")
+                                : mailbox.label == "Drafts" ? @image-url("../icons/phosphor/file-plus-fill.svg")
+                                : mailbox.scope == root.selected-scope ? @image-url("../icons/phosphor/folder-open-fill.svg")
+                                : @image-url("../icons/phosphor/folder-simple-fill.svg");
                             selected: mailbox.scope == root.selected-scope;
                             prominent: mailbox.label == "Inbox";
                             // Include the 3px inter-row gap in the row pitch so
@@ -410,6 +411,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                                 : mailbox.label == "Spam" ? #f59e0b
                                 : mailbox.label == "Trash" ? #ff5b4d
                                 : mailbox.label == "Drafts" ? #d946ef
+                                : mailbox.has_custom_color ? mailbox.color
                                 : #22a06b;
                             clicked(scope) => { root.select-scope(scope); }
                         }
@@ -435,7 +437,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         y: 10px;
                         width: 14px;
                         height: 14px;
-                        source: @image-url("../icons/solar-icons/add-outline.svg");
+                        source: @image-url("../icons/phosphor/plus.svg");
                         colorize: root.muted-color;
                         image-fit: contain;
                         accessible-role: none;

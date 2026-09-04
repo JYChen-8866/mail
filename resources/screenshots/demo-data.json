@@ -22,6 +22,17 @@
   "selected_time": "Today at 9:41 AM",
   "selected_to": "alex@flectar.com",
   "selected_label": "REPORTS",
+  "selected_mail_label_count": 2,
+  "mail_labels": [
+    { "id": 1, "name": "Reports", "color": "#4a86e8", "applied": true, "is_auto": false },
+    { "id": 2, "name": "Marketing", "color": "#e0708a", "applied": true, "is_auto": true },
+    { "id": 3, "name": "Follow up", "color": "#8b5cf6", "applied": false, "is_auto": false }
+  ],
+  "mail_label_results": [
+    { "id": 1, "name": "Reports", "color": "#4a86e8", "applied": true, "is_auto": false },
+    { "id": 2, "name": "Marketing", "color": "#e0708a", "applied": true, "is_auto": true },
+    { "id": 3, "name": "Follow up", "color": "#8b5cf6", "applied": false, "is_auto": false }
+  ],
   "selected_initials": "CF",
   "selected_favicon": "",
   "selected_has_favicon": false,
@@ -69,34 +80,34 @@
     }
   ],
   "unified_mailboxes": [
-    { "label": "Starred", "scope": "Unified Starred", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "7" },
-    { "label": "Sent", "scope": "Unified Sent", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Archive", "scope": "Unified Archive", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Spam", "scope": "Unified Spam", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "2" },
-    { "label": "Trash", "scope": "Unified Trash", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Drafts", "scope": "Unified Drafts", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "3" }
+    { "label": "Starred", "scope": "Unified Starred", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "7", "color": "#000000", "has_custom_color": false },
+    { "label": "Sent", "scope": "Unified Sent", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Archive", "scope": "Unified Archive", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Spam", "scope": "Unified Spam", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "2", "color": "#000000", "has_custom_color": false },
+    { "label": "Trash", "scope": "Unified Trash", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Drafts", "scope": "Unified Drafts", "context": "", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "3", "color": "#000000", "has_custom_color": false }
   ],
   "account_mailboxes": [
-    { "label": "Flectar", "scope": "Flectar", "context": "Flectar", "detail": "alex@flectar.com", "avatar": "FL", "has_avatar": false, "is_account": true, "count": "16" },
-    { "label": "Flectar Support", "scope": "Flectar Support", "context": "Flectar Support", "detail": "support@flectar.com", "avatar": "FS", "has_avatar": false, "is_account": true, "count": "9" }
+    { "label": "Flectar", "scope": "Flectar", "context": "Flectar", "detail": "alex@flectar.com", "avatar": "FL", "has_avatar": false, "is_account": true, "count": "16", "color": "#000000", "has_custom_color": false },
+    { "label": "Flectar Support", "scope": "Flectar Support", "context": "Flectar Support", "detail": "support@flectar.com", "avatar": "FS", "has_avatar": false, "is_account": true, "count": "9", "color": "#000000", "has_custom_color": false }
   ],
   "mailboxes": [
-    { "label": "Inbox", "scope": "Flectar / Inbox", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "16" },
-    { "label": "Starred", "scope": "Flectar / Starred", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "4" },
-    { "label": "Sent", "scope": "Flectar / Sent", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Archive", "scope": "Flectar / Archive", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Spam", "scope": "Flectar / Spam", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "1" },
-    { "label": "Trash", "scope": "Flectar / Trash", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Drafts", "scope": "Flectar / Drafts", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "2" },
-    { "label": "Projects", "scope": "Flectar / Projects", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "5" },
-    { "label": "Inbox", "scope": "Flectar Support / Inbox", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "9" },
-    { "label": "Starred", "scope": "Flectar Support / Starred", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "3" },
-    { "label": "Sent", "scope": "Flectar Support / Sent", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Archive", "scope": "Flectar Support / Archive", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Spam", "scope": "Flectar Support / Spam", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "1" },
-    { "label": "Trash", "scope": "Flectar Support / Trash", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "" },
-    { "label": "Drafts", "scope": "Flectar Support / Drafts", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "1" },
-    { "label": "Customers", "scope": "Flectar Support / Customers", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "4" }
+    { "label": "Inbox", "scope": "Flectar / Inbox", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "16", "color": "#000000", "has_custom_color": false },
+    { "label": "Starred", "scope": "Flectar / Starred", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "4", "color": "#000000", "has_custom_color": false },
+    { "label": "Sent", "scope": "Flectar / Sent", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Archive", "scope": "Flectar / Archive", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Spam", "scope": "Flectar / Spam", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "1", "color": "#000000", "has_custom_color": false },
+    { "label": "Trash", "scope": "Flectar / Trash", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Drafts", "scope": "Flectar / Drafts", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "2", "color": "#000000", "has_custom_color": false },
+    { "label": "Projects", "scope": "Flectar / Projects", "context": "Flectar", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "5", "color": "#000000", "has_custom_color": false },
+    { "label": "Inbox", "scope": "Flectar Support / Inbox", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "9", "color": "#000000", "has_custom_color": false },
+    { "label": "Starred", "scope": "Flectar Support / Starred", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "3", "color": "#000000", "has_custom_color": false },
+    { "label": "Sent", "scope": "Flectar Support / Sent", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Archive", "scope": "Flectar Support / Archive", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Spam", "scope": "Flectar Support / Spam", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "1", "color": "#000000", "has_custom_color": false },
+    { "label": "Trash", "scope": "Flectar Support / Trash", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "", "color": "#000000", "has_custom_color": false },
+    { "label": "Drafts", "scope": "Flectar Support / Drafts", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "1", "color": "#000000", "has_custom_color": false },
+    { "label": "Customers", "scope": "Flectar Support / Customers", "context": "Flectar Support", "detail": "", "avatar": "", "has_avatar": false, "is_account": false, "count": "4", "color": "#000000", "has_custom_color": false }
   ],
   "emails": [
     {
@@ -114,6 +125,11 @@
       "unread": true,
       "starred": true,
       "has_attachments": true,
+      "label_summary": "Reports · Marketing",
+      "labels": [
+        { "id": 1, "name": "Reports", "color": "#4a86e8", "applied": true, "is_auto": false },
+        { "id": 2, "name": "Marketing", "color": "#e0708a", "applied": true, "is_auto": true }
+      ],
       "selected": true
     },
     {
@@ -131,6 +147,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": true,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -148,6 +166,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -165,6 +185,8 @@
       "unread": true,
       "starred": true,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -182,6 +204,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -199,6 +223,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -216,6 +242,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -233,6 +261,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -250,6 +280,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -267,6 +299,8 @@
       "unread": false,
       "starred": true,
       "has_attachments": true,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -284,6 +318,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -301,6 +337,8 @@
       "unread": true,
       "starred": true,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -318,6 +356,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -335,6 +375,8 @@
       "unread": true,
       "starred": true,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -352,6 +394,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": true,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -369,6 +413,8 @@
       "unread": true,
       "starred": false,
       "has_attachments": true,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -386,6 +432,8 @@
       "unread": false,
       "starred": true,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -403,6 +451,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -420,6 +470,8 @@
       "unread": false,
       "starred": true,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -437,6 +489,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -454,6 +508,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -471,6 +527,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -488,6 +546,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": true,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -505,6 +565,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     },
     {
@@ -522,6 +584,8 @@
       "unread": false,
       "starred": false,
       "has_attachments": false,
+      "label_summary": "",
+      "labels": [],
       "selected": false
     }
   ]

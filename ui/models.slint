@@ -17,6 +17,19 @@ export struct MailboxRow {
     has_avatar: bool,
     is_account: bool,
     count: string,
+    color: color,
+    has_custom_color: bool,
+}
+
+// Provider labels and local auto-categories share one presentation model.
+// `applied` is projected for the currently selected thread so menus and chips
+// update from the same source of truth after every action.
+export struct MailLabelRow {
+    id: int,
+    name: string,
+    color: color,
+    applied: bool,
+    is_auto: bool,
 }
 
 export struct EmailRow {
@@ -35,6 +48,8 @@ export struct EmailRow {
     unread: bool,
     starred: bool,
     has_attachments: bool,
+    label_summary: string,
+    labels: [MailLabelRow],
     selected: bool,
 }
 

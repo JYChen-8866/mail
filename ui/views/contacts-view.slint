@@ -2,10 +2,11 @@ import { HorizontalBox, ListView, ScrollView, VerticalBox } from "std-widgets.sl
 import { ContactAccountRow, ContactRow } from "../models.slint";
 import { Avatar } from "../components/avatar.slint";
 import { Button } from "../components/button.slint";
-import { IconButton, LineEdit, TextEdit, ToolbarIconButton } from "../components/controls.slint";
+import { FloatingActionButton, IconButton, LineEdit, TextEdit, ToolbarIconButton } from "../components/controls.slint";
 import { SidebarItem, SidebarSectionHeader } from "../components/sidebar.slint";
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics } from "../design-system.slint";
+import { ScrollFade } from "../components/scroll-fade.slint";
 import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading, WorkspaceTitleRow } from "../components/workspace-layout.slint";
 
 component FieldLabel inherits Text {
@@ -201,7 +202,7 @@ export component ContactsView inherits Rectangle {
                     text: @tr("New contact");
                     primary: true;
                     has-icon: true;
-                    icon: @image-url("../icons/solar-icons/user-plus-rounded-bold.svg");
+                    icon: @image-url("../icons/phosphor/user-plus-fill.svg");
                     clicked => {
                         root.detail-page-visible = true;
                         root.new-contact();
@@ -228,7 +229,7 @@ export component ContactsView inherits Rectangle {
 
                 unified-section := SidebarSectionHeader {
                     label: @tr("Unified contacts");
-                    icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                    icon: @image-url("../icons/phosphor/users-fill.svg");
                     sidebar-background: root.sidebar-bg;
                     body-color: root.body-text;
                     muted-color: root.muted-text;
@@ -244,7 +245,7 @@ export component ContactsView inherits Rectangle {
                         label: @tr("All contacts");
                         count: root.total-count > 0 ? root.total-count : "";
                         scope: "all";
-                        icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                        icon: @image-url("../icons/phosphor/users-fill.svg");
                         selected: root.selected-scope == "All contacts";
                         prominent: true;
                         sidebar-background: root.sidebar-bg;
@@ -259,7 +260,7 @@ export component ContactsView inherits Rectangle {
                         label: @tr("Favorites");
                         count: root.favorite-count > 0 ? root.favorite-count : "";
                         scope: "favorites";
-                        icon: @image-url("../icons/solar-icons/star-bold.svg");
+                        icon: @image-url("../icons/phosphor/star-fill.svg");
                         selected: root.selected-scope == "Favorites";
                         sidebar-background: root.sidebar-bg;
                         selection-background: root.accent-soft;
@@ -299,7 +300,7 @@ export component ContactsView inherits Rectangle {
                         label: @tr("Contacts");
                         count: account.count;
                         scope: "Account:" + account.id;
-                        icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                        icon: @image-url("../icons/phosphor/users-fill.svg");
                         selected: account.selected;
                         prominent: true;
                         sidebar-background: root.sidebar-bg;
@@ -357,7 +358,7 @@ export component ContactsView inherits Rectangle {
                             title-font-size: root.compact ? TypeScale.title-small : TypeScale.heading-small;
                             title-weight: 600;
                             show-leading: !root.compact;
-                            leading-icon: @image-url("../icons/solar-icons/sidebar-outline.svg");
+                            leading-icon: @image-url("../icons/phosphor/sidebar-simple-fill.svg");
                             leading-tooltip: root.sidebar-collapsed ? @tr("Show contact groups") : @tr("Hide contact groups");
                             leading-accessible-id: "contacts-sidebar-button";
                             leading-ghost: true;
@@ -367,18 +368,6 @@ export component ContactsView inherits Rectangle {
                                 color: root.muted-text;
                                 font-size: TypeScale.caption;
                                 vertical-alignment: center;
-                            }
-                            ToolbarIconButton {
-                                visible: root.compact || root.sidebar-collapsed;
-                                compact: root.compact;
-                                icon: @image-url("../icons/solar-icons/user-plus-rounded-bold.svg");
-                                primary: true;
-                                tooltip-text: @tr("New contact");
-                                accessible-id: "contacts-new-button";
-                                clicked => {
-                                    root.detail-page-visible = true;
-                                    root.new-contact();
-                                }
                             }
                         }
 
@@ -395,7 +384,7 @@ export component ContactsView inherits Rectangle {
                                     text: root.query;
                                     placeholder-text: @tr("Search contacts");
                                     show-leading-icon: true;
-                                    leading-icon: @image-url("../icons/solar-icons/magnifier-outline.svg");
+                                    leading-icon: @image-url("../icons/phosphor/magnifying-glass.svg");
                                     leading-icon-color: root.secondary-text;
                                     trailing-content-width: 40px;
                                     edited(value) => { root.search(value); }
@@ -407,7 +396,7 @@ export component ContactsView inherits Rectangle {
                                     IconButton {
                                         width: 40px;
                                         height: 40px;
-                                        icon: @image-url("../icons/solar-icons/filter-outline.svg");
+                                        icon: @image-url("../icons/phosphor/funnel.svg");
                                         icon-color: root.filter == "all" ? root.secondary-text : root.accent;
                                         ghost: true;
                                         hover-background: root.muted-control-bg;
@@ -427,7 +416,7 @@ export component ContactsView inherits Rectangle {
                             IconButton {
                                 width: 40px;
                                 height: 40px;
-                                icon: @image-url("../icons/solar-icons/refresh-outline.svg");
+                                icon: @image-url("../icons/phosphor/arrow-clockwise.svg");
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
@@ -506,7 +495,7 @@ export component ContactsView inherits Rectangle {
                                         y: 3px;
                                         width: 15px;
                                         height: 15px;
-                                        source: @image-url("../icons/solar-icons/star-bold.svg");
+                                        source: @image-url("../icons/phosphor/star-fill.svg");
                                         colorize: root.accent;
                                         image-fit: contain;
                                         accessible-role: none;
@@ -559,6 +548,33 @@ export component ContactsView inherits Rectangle {
                         horizontal-alignment: center;
                         vertical-alignment: center;
                     }
+
+                    ScrollFade {
+                        x: contact-list.x;
+                        y: contact-list.y;
+                        width: contact-list.visible-width;
+                        height: contact-list.visible-height;
+                        surface-color: root.surface;
+                        viewport-y: contact-list.viewport-y;
+                        viewport-height: contact-list.viewport-height;
+                        visible-height: contact-list.visible-height;
+                    }
+
+                    FloatingActionButton {
+                        // Mirrors the sidebar's New contact action when the
+                        // contact groups are collapsed or unavailable.
+                        visible: root.compact || root.sidebar-collapsed;
+                        x: parent.width - self.width - 16px;
+                        y: parent.height - self.height - 16px;
+                        icon: @image-url("../icons/phosphor/user-plus-fill.svg");
+                        tooltip-text: @tr("New contact");
+                        accessible-id: "contacts-new-button";
+                        z: 100;
+                        clicked => {
+                            root.detail-page-visible = true;
+                            root.new-contact();
+                        }
+                    }
                 }
             }
         }
@@ -591,8 +607,8 @@ export component ContactsView inherits Rectangle {
                             visible: root.single-surface;
                             compact: root.compact;
                             icon: root.compact
-                                ? @image-url("../icons/solar-icons/arrow-left-outline.svg")
-                                : @image-url("../icons/solar-icons/close-outline.svg");
+                                ? @image-url("../icons/phosphor/arrow-left.svg")
+                                : @image-url("../icons/phosphor/x.svg");
                             icon-color: root.secondary-text;
                             hover-background: root.muted-control-bg;
                             tooltip-text: @tr("Back to contacts");
@@ -612,7 +628,7 @@ export component ContactsView inherits Rectangle {
                         Rectangle { horizontal-stretch: 1; }
                         ToolbarIconButton {
                             compact: root.compact;
-                            icon: root.edit-favorite ? @image-url("../icons/solar-icons/star-bold.svg") : @image-url("../icons/solar-icons/star-outline.svg");
+                            icon: root.edit-favorite ? @image-url("../icons/phosphor/star-fill.svg") : @image-url("../icons/phosphor/star.svg");
                             icon-color: root.edit-favorite ? root.accent : root.secondary-text;
                             hover-background: root.muted-control-bg;
                             active-background: root.accent-soft;
@@ -641,7 +657,7 @@ export component ContactsView inherits Rectangle {
                         if !root.delete-confirming : ToolbarIconButton {
                             visible: root.selected-id > 0;
                             compact: root.compact;
-                            icon: @image-url("../icons/solar-icons/trash-bin-trash-outline.svg");
+                            icon: @image-url("../icons/phosphor/trash.svg");
                             icon-color: root.secondary-text;
                             hover-background: root.muted-control-bg;
                             tooltip-text: @tr("Delete contact");
@@ -748,7 +764,7 @@ export component ContactsView inherits Rectangle {
                                 visible: root.edit-email != "";
                                 text: @tr("Send email");
                                 has-icon: true;
-                                icon: @image-url("../icons/solar-icons/plane-bold.svg");
+                                icon: @image-url("../icons/phosphor/paper-plane-tilt-fill.svg");
                                 clicked => { root.compose-to-contact(root.edit-email); }
                             }
                             Rectangle { horizontal-stretch: 1; }
@@ -778,7 +794,7 @@ export component ContactsView inherits Rectangle {
                 Image {
                     width: 44px;
                     height: 44px;
-                    source: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+                    source: @image-url("../icons/phosphor/users-fill.svg");
                     colorize: root.muted-text;
                     image-fit: contain;
                     accessible-role: none;

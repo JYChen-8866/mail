@@ -46,7 +46,7 @@ use flectar_mail_core::config::Paths;
 use flectar_mail_core::models::{
     Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, ContactRecord,
     ContactRecordCursor, ContactRecordPage, CreateEventArgs, DraftAttachmentIn, MailProtocol,
-    Provider, ThreadCursor, UpdateEventArgs,
+    Label, Provider, ThreadCursor, UpdateEventArgs,
 };
 #[cfg(test)]
 use mail::fixture_messages;
@@ -378,6 +378,7 @@ struct InboxState {
     use_wgpu: bool,
     using_core: bool,
     messages: Vec<MailMessage>,
+    labels: Vec<Label>,
     email_rows: Rc<VecModel<EmailRow>>,
     mailboxes: Vec<MailboxEntry>,
     unified_mailboxes: Vec<MailboxEntry>,
@@ -477,6 +478,7 @@ impl InboxState {
             total_count: 0,
             inbox_count: 0,
             messages: Vec::new(),
+            labels: Vec::new(),
             email_rows: Rc::new(VecModel::default()),
             scope: "Unified Inbox".to_owned(),
             query: String::new(),
@@ -2411,6 +2413,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                                 state.inbox_count = page.messages.len();
                             }
                             state.messages = page.messages;
+                            state.labels = page.labels;
                             state.mailboxes = page.mailboxes;
                             state.unified_mailboxes = page.unified_mailboxes;
                             state.next_cursor = page.next_cursor;
@@ -2422,6 +2425,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         } else {
                             state.using_core = true;
                             state.messages.clear();
+                            state.labels.clear();
                             state.mailboxes.clear();
                             state.unified_mailboxes.clear();
                             state.total_count = 0;
@@ -2999,6 +3003,108 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 app.set_render_status(UiMessage::detail("Message action failed: {}", error))
             }
         }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_label = Rc::clone(&state);
+    let runtime_for_label = Rc::clone(&runtime);
+    app.on_toggle_mail_label(move |label_id, applied| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let (core, thread_id) = {
+            let state = state_for_label.borrow();
+            let thread_id = state
+                .selected_id
+                .and_then(|id| state.messages.iter().find(|message| message.id == id))
+                .and_then(|message| message.thread_id);
+            (state.core.clone(), thread_id)
+        };
+        let result = (|| {
+            let core = core.ok_or_else(|| "mail core is unavailable".to_owned())?;
+            let thread_id = thread_id.ok_or_else(|| "no message is selected".to_owned())?;
+            runtime_for_label.block_on(core.perform_label_action(
+                thread_id,
+                i64::from(label_id),
+                applied,
+            ))?;
+            refresh_from_source(&app, &state_for_label, &runtime_for_label, true)
+        })();
+        match result {
+            Ok(()) if applied => app.set_render_status(UiMessage::plain("Label added.")),
+            Ok(()) => app.set_render_status(UiMessage::plain("Label removed.")),
+            Err(error) => app.set_render_status(UiMessage::detail(
+                "Could not update label: {}",
+                error,
+            )),
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_save_label = Rc::clone(&state);
+    let runtime_for_save_label = Rc::clone(&runtime);
+    app.on_save_mail_label(move |label_id, name, color| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let (core, thread_id) = {
+            let state = state_for_save_label.borrow();
+            let thread_id = state
+                .selected_id
+                .and_then(|id| state.messages.iter().find(|message| message.id == id))
+                .and_then(|message| message.thread_id);
+            (state.core.clone(), thread_id)
+        };
+        let existing_id = (label_id >= 0).then_some(i64::from(label_id));
+        let color = format!("#{:02x}{:02x}{:02x}", color.red(), color.green(), color.blue());
+        let result: Result<bool, String> = (|| {
+            let core = core.ok_or_else(|| "mail core is unavailable".to_owned())?;
+            let label = runtime_for_save_label.block_on(core.save_label(
+                existing_id,
+                name.as_str(),
+                color.as_str(),
+            ))?;
+            if existing_id.is_none() {
+                let thread_id = thread_id.ok_or_else(|| "no message is selected".to_owned())?;
+                runtime_for_save_label.block_on(core.perform_label_action(
+                    thread_id,
+                    label.id,
+                    true,
+                ))?;
+            }
+            refresh_from_source(
+                &app,
+                &state_for_save_label,
+                &runtime_for_save_label,
+                true,
+            )?;
+            Ok(existing_id.is_some())
+        })();
+        match result {
+            Ok(true) => app.set_render_status(UiMessage::plain("Label updated.")),
+            Ok(false) => app.set_render_status(UiMessage::plain("Label created and added.")),
+            Err(error) => app.set_render_status(UiMessage::detail(
+                "Could not save label: {}",
+                error,
+            )),
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_label_search = Rc::clone(&state);
+    app.on_search_mail_labels(move |query| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let state = state_for_label_search.borrow();
+        let selected = state
+            .selected_id
+            .and_then(|id| state.messages.iter().find(|message| message.id == id));
+        app.set_mail_label_results(ModelRc::new(VecModel::from(make_label_rows(
+            &state.labels,
+            selected,
+            query.as_str(),
+        ))));
     });
 
     let app_weak = app.as_weak();

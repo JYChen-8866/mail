@@ -96,8 +96,8 @@ export component ProductRail inherits Rectangle {
 
         mail-item := ProductRailItem {
             label: @tr("Mail");
-            outline-icon: @image-url("../icons/solar-icons/letter-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/letter-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/envelope-simple.svg");
+            filled-icon: @image-url("../icons/phosphor/envelope-simple-fill.svg");
             active: !root.settings-active && root.active-view == "mail";
             accent-color: root.accent-color;
             accent-background: root.accent-background;
@@ -107,8 +107,8 @@ export component ProductRail inherits Rectangle {
 
         calendar-item := ProductRailItem {
             label: @tr("Calendar");
-            outline-icon: @image-url("../icons/solar-icons/calendar-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/calendar-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/calendar-dots.svg");
+            filled-icon: @image-url("../icons/phosphor/calendar-dots-fill.svg");
             active: !root.settings-active && root.active-view == "calendar";
             accent-color: root.accent-color;
             accent-background: root.accent-background;
@@ -118,8 +118,8 @@ export component ProductRail inherits Rectangle {
 
         contacts-item := ProductRailItem {
             label: @tr("Contacts");
-            outline-icon: @image-url("../icons/solar-icons/users-group-two-rounded-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/address-book.svg");
+            filled-icon: @image-url("../icons/phosphor/address-book-fill.svg");
             active: !root.settings-active && root.active-view == "contacts";
             accent-color: root.accent-color;
             accent-background: root.accent-background;
@@ -131,8 +131,8 @@ export component ProductRail inherits Rectangle {
 
         settings-item := ProductRailItem {
             label: @tr("Settings");
-            outline-icon: @image-url("../icons/solar-icons/settings-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/settings-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/gear.svg");
+            filled-icon: @image-url("../icons/phosphor/gear-fill.svg");
             active: root.settings-active;
             accent-color: root.accent-color;
             accent-background: root.accent-background;
@@ -243,8 +243,8 @@ export component CompactProductNav inherits Rectangle {
         CompactProductNavItem {
             horizontal-stretch: 1;
             label: @tr("Mail");
-            outline-icon: @image-url("../icons/solar-icons/letter-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/letter-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/envelope-simple.svg");
+            filled-icon: @image-url("../icons/phosphor/envelope-simple-fill.svg");
             active: !root.settings-active && root.active-view == "mail";
             accent-color: root.accent-color;
             active-background: root.accent-background;
@@ -254,8 +254,8 @@ export component CompactProductNav inherits Rectangle {
         CompactProductNavItem {
             horizontal-stretch: 1;
             label: @tr("Calendar");
-            outline-icon: @image-url("../icons/solar-icons/calendar-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/calendar-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/calendar-dots.svg");
+            filled-icon: @image-url("../icons/phosphor/calendar-dots-fill.svg");
             active: !root.settings-active && root.active-view == "calendar";
             accent-color: root.accent-color;
             active-background: root.accent-background;
@@ -265,8 +265,8 @@ export component CompactProductNav inherits Rectangle {
         CompactProductNavItem {
             horizontal-stretch: 1;
             label: @tr("Contacts");
-            outline-icon: @image-url("../icons/solar-icons/users-group-two-rounded-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/users-group-two-rounded-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/address-book.svg");
+            filled-icon: @image-url("../icons/phosphor/address-book-fill.svg");
             active: !root.settings-active && root.active-view == "contacts";
             accent-color: root.accent-color;
             active-background: root.accent-background;
@@ -276,8 +276,8 @@ export component CompactProductNav inherits Rectangle {
         CompactProductNavItem {
             horizontal-stretch: 1;
             label: @tr("Settings");
-            outline-icon: @image-url("../icons/solar-icons/settings-outline.svg");
-            filled-icon: @image-url("../icons/solar-icons/settings-bold.svg");
+            outline-icon: @image-url("../icons/phosphor/gear.svg");
+            filled-icon: @image-url("../icons/phosphor/gear-fill.svg");
             active: root.settings-active;
             accent-color: root.accent-color;
             active-background: root.accent-background;

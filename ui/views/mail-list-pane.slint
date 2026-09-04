@@ -1,10 +1,49 @@
 import { HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
 import { EmailRow } from "../models.slint";
 import { Avatar } from "../components/avatar.slint";
-import { IconButton, LineEdit, ToolbarIconButton } from "../components/controls.slint";
+import { FloatingActionButton, IconButton, LineEdit } from "../components/controls.slint";
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics } from "../design-system.slint";
+import { ScrollFade } from "../components/scroll-fade.slint";
 import { WorkspaceTitleRow } from "../components/workspace-layout.slint";
+
+component MailListLabelChip inherits Rectangle {
+    in property <string> name;
+    in property <color> label-color;
+    in property <color> text-color;
+    in property <bool> compact: false;
+
+    min-width: min(root.compact ? 68px : 92px, chip-name.preferred-width + 25px);
+    preferred-width: self.min-width;
+    max-width: self.min-width;
+    height: 20px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: root.label-color.transparentize(0.55);
+    background: root.label-color.transparentize(0.86);
+
+    Image {
+        x: 5px;
+        y: 4px;
+        width: 12px;
+        height: 12px;
+        source: @image-url("../icons/phosphor/folder-simple-fill.svg");
+        colorize: root.label-color;
+        image-fit: contain;
+        accessible-role: none;
+    }
+    chip-name := Text {
+        x: 21px;
+        width: parent.width - 25px;
+        height: parent.height;
+        text: root.name;
+        color: root.text-color;
+        font-size: TypeScale.caption;
+        font-weight: 600;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+}
 
 export component MailListPane inherits Rectangle {
     in property <bool> compact: false;
@@ -176,7 +215,7 @@ export component MailListPane inherits Rectangle {
                                 title-font-size: root.compact ? TypeScale.title-small : TypeScale.heading-small;
                                 title-weight: 600;
                                 show-leading: true;
-                                leading-icon: @image-url("../icons/solar-icons/sidebar-outline.svg");
+                                leading-icon: @image-url("../icons/phosphor/sidebar-simple-fill.svg");
                                 leading-tooltip: root.mail_sidebar_collapsed ? @tr("Show folders") : @tr("Hide folders");
                                 leading-accessible-id: "mail-folders-button";
                                 leading-ghost: true;
@@ -188,18 +227,6 @@ export component MailListPane inherits Rectangle {
                                     }
                                 }
                                 Text { height: parent.height; text: root.total_count; color: root.muted-text; font-size: TypeScale.caption; vertical-alignment: center; }
-                                ToolbarIconButton {
-                                    // Preserve the primary compose action when
-                                    // the desktop sidebar (and its full-width
-                                    // New email button) is collapsed.
-                                    visible: root.single-pane-navigation || root.mail_sidebar_collapsed;
-                                    compact: root.compact;
-                                    icon: @image-url("../icons/solar-icons/add-outline.svg");
-                                    primary: true;
-                                    tooltip-text: @tr("New email");
-                                    accessible-id: "mail-compose-button";
-                                    clicked => { root.open_compose(); }
-                                }
                             }
 
                             HorizontalBox {
@@ -218,7 +245,7 @@ export component MailListPane inherits Rectangle {
                                         text: root.search_query;
                                         placeholder-text: @tr("Search mail");
                                         show-leading-icon: true;
-                                        leading-icon: @image-url("../icons/solar-icons/magnifier-outline.svg");
+                                        leading-icon: @image-url("../icons/phosphor/magnifying-glass.svg");
                                         leading-icon-color: root.secondary-text;
                                         trailing-content-width: 40px;
                                         edited(text) => { root.search_changed(text); }
@@ -230,7 +257,7 @@ export component MailListPane inherits Rectangle {
                                         IconButton {
                                             width: 40px;
                                             height: 40px;
-                                            icon: @image-url("../icons/solar-icons/filter-outline.svg");
+                                            icon: @image-url("../icons/phosphor/funnel.svg");
                                             icon-color: root.search_filter == "All mail" ? root.secondary-text : root.accent;
                                             ghost: true;
                                             hover-background: root.muted-control-bg;
@@ -252,7 +279,7 @@ export component MailListPane inherits Rectangle {
                                     width: 40px;
                                     height: 40px;
                                     interactive: !root.sync_in_progress;
-                                    icon: @image-url("../icons/solar-icons/refresh-outline.svg");
+                                    icon: @image-url("../icons/phosphor/arrow-clockwise.svg");
                                     icon-color: root.secondary-text;
                                     idle-background: root.control-bg;
                                     hover-background: root.muted-control-bg;
@@ -320,7 +347,8 @@ export component MailListPane inherits Rectangle {
                                 clip: true;
                                 background: row.selected ? root.selected-row : root.surface;
                                 accessible-role: list-item;
-                                accessible-label: @tr("{}, {}", row.sender, row.subject == "" ? @tr("(No subject)") : row.subject);
+                                accessible-label: @tr("{}, {}", row.sender, row.subject == "" ? @tr("(No subject)") : row.subject)
+                                    + (row.label_summary == "" ? "" : ", " + row.label_summary);
                                 accessible-id: "mail-row-" + row.id;
                                 accessible-item-index: index;
                                 accessible-item-selectable: true;
@@ -410,16 +438,38 @@ export component MailListPane inherits Rectangle {
                                         horizontal-alignment: right;
                                         vertical-alignment: center;
                                     }
-                                    Text {
+                                    HorizontalBox {
                                         x: root.dense ? subject-label.x + subject-label.width + 12px : 0px;
                                         y: root.dense ? 0px : 54px;
                                         width: root.dense ? max(0px, sender-time.x - self.x - 12px) : max(0px, parent.width - 98px);
                                         height: root.dense ? 44px : 20px;
-                                        text: row.preview;
-                                        color: root.faint-text;
-                                        font-size: TypeScale.secondary;
-                                        overflow: elide;
-                                        vertical-alignment: center;
+                                        spacing: 4px;
+                                        cross-axis-alignment: center;
+
+                                        for label[index] in row.labels : MailListLabelChip {
+                                            visible: index < (root.dense ? 1 : 2);
+                                            name: label.name;
+                                            label-color: label.color;
+                                            text-color: root.heading;
+                                            compact: root.dense;
+                                        }
+                                        if row.labels.length > (root.dense ? 1 : 2) : Text {
+                                            min-width: 22px;
+                                            preferred-width: 22px;
+                                            max-width: 22px;
+                                            text: "+" + (row.labels.length - (root.dense ? 1 : 2));
+                                            color: root.secondary-text;
+                                            font-size: TypeScale.caption;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            horizontal-stretch: 1;
+                                            text: row.preview;
+                                            color: root.faint-text;
+                                            font-size: TypeScale.secondary;
+                                            overflow: elide;
+                                            vertical-alignment: center;
+                                        }
                                     }
                                 }
 
@@ -471,6 +521,30 @@ export component MailListPane inherits Rectangle {
                                 Text { text: root.loading ? @tr("Opening your mailbox…") : @tr("Nothing here"); color: root.heading; font-size: TypeScale.subtitle; font-weight: 700; }
                                 if !root.loading : Text { text: @tr("Try another folder or search term."); color: root.muted-text; font-size: TypeScale.secondary; }
                             }
+                        }
+
+                        ScrollFade {
+                            x: mail-list-scroll.x;
+                            y: mail-list-scroll.y;
+                            width: mail-list-scroll.visible-width;
+                            height: mail-list-scroll.visible-height;
+                            surface-color: root.surface;
+                            viewport-y: mail-list-scroll.viewport-y;
+                            viewport-height: mail-list-scroll.viewport-height;
+                            visible-height: mail-list-scroll.visible-height;
+                        }
+
+                        FloatingActionButton {
+                            // Replaces the full-width sidebar action whenever
+                            // folders are collapsed or unavailable.
+                            visible: root.single-pane-navigation || root.mail_sidebar_collapsed;
+                            x: parent.width - self.width - 16px;
+                            y: parent.height - self.height - 16px;
+                            icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
+                            tooltip-text: @tr("New email");
+                            accessible-id: "mail-compose-button";
+                            z: 100;
+                            clicked => { root.open_compose(); }
                         }
                     }
 

@@ -118,7 +118,7 @@ export component OnboardingView inherits Rectangle {
                 }
                 ProviderButton {
                     text: @tr("Connect another provider");
-                    icon: @image-url("../icons/solar-icons/letter-outline.svg");
+                    icon: @image-url("../icons/phosphor/envelope.svg");
                     colorize-icon: true;
                     // Optical correction for the asymmetric mail-outline glyph.
                     icon-offset-x: 1px;
@@ -140,7 +140,7 @@ export component OnboardingView inherits Rectangle {
                 Button {
                     height: 42px;
                     text: @tr("Import a backup");
-                    icon: @image-url("../icons/solar-icons/import-outline.svg");
+                    icon: @image-url("../icons/phosphor/tray-arrow-down.svg");
                     has-icon: true;
                     enabled: !root.oauth-in-progress;
                     clicked => { root.import-account-backup(); }

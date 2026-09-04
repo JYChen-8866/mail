@@ -1,5 +1,5 @@
 import { HorizontalBox } from "std-widgets.slint";
-import { EmailLink, EmailRow, EmailTile, MailboxRow } from "../models.slint";
+import { EmailLink, EmailRow, EmailTile, MailboxRow, MailLabelRow } from "../models.slint";
 import { MailSidebar } from "../components/sidebar.slint";
 import { MailListPane } from "mail-list-pane.slint";
 import { MailReadingPane } from "mail-reading-pane.slint";
@@ -15,6 +15,9 @@ export component MailView inherits Rectangle {
     in property <[MailboxRow]> mailboxes: [];
     in property <[MailboxRow]> account_mailboxes: [];
     in property <[MailboxRow]> unified_mailboxes: [];
+    in property <[MailLabelRow]> mail_labels: [];
+    in property <[MailLabelRow]> mail_label_results: [];
+    in property <int> selected_mail_label_count: 0;
     in property <[EmailTile]> email_tiles: [];
     in property <[EmailLink]> email_links: [];
     in property <string> active_view: "mail";
@@ -44,6 +47,8 @@ export component MailView inherits Rectangle {
     in property <bool> loading_more: false;
     in property <int> list_content_revision: 0;
     in property <bool> has_selected: true;
+    in property <int> previous-email-id: -1;
+    in property <int> next-email-id: -1;
     in property <bool> selected_starred: false;
     in property <bool> selected_unread: false;
     in property <bool> selected_is_draft: false;
@@ -90,6 +95,9 @@ export component MailView inherits Rectangle {
     callback sync_mail();
     callback message_action(string);
     callback message_action_for_email(int, string);
+    callback toggle_mail_label(int, bool);
+    callback save_mail_label(int, string, color);
+    callback search_mail_labels(string);
     callback compose_message_action(string);
     callback close_preview();
     callback print_message();
@@ -182,6 +190,7 @@ export component MailView inherits Rectangle {
                 set_search_filter(filter) => { root.set_search_filter(filter); }
                 load_more => { root.load_more(); }
                 sync_mail => { root.sync_mail(); }
+                open_compose => { root.open_compose(); }
                 message_action_for_email(id, action) => {
                     root.message_action_for_email(id, action);
                 }
@@ -209,6 +218,9 @@ export component MailView inherits Rectangle {
                 selected_time: root.selected_time;
                 selected_to: root.selected_to;
                 selected_label: root.selected_label;
+                mail_labels: root.mail_labels;
+                mail-label-results: root.mail_label_results;
+                selected-label-count: root.selected_mail_label_count;
                 selected_initials: root.selected_initials;
                 selected_favicon: root.selected_favicon;
                 selected_has_favicon: root.selected_has_favicon;
@@ -219,6 +231,8 @@ export component MailView inherits Rectangle {
                 clipboard_request: root.clipboard_request;
                 clipboard_request_id: root.clipboard_request_id;
                 has_selected: root.has_selected;
+                previous-email-id: root.previous-email-id;
+                next-email-id: root.next-email-id;
                 selected_starred: root.selected_starred;
                 selected_unread: root.selected_unread;
                 selected_is_draft: root.selected_is_draft;
@@ -242,6 +256,10 @@ export component MailView inherits Rectangle {
                 surface-raised: root.surface-raised;
                 title-color: root.title-color;
                 message_action(action) => { root.message_action(action); }
+                toggle-mail-label(id, applied) => { root.toggle_mail_label(id, applied); }
+                save-mail-label(id, name, color) => { root.save_mail_label(id, name, color); }
+                search-mail-labels(query) => { root.search_mail_labels(query); }
+                select_email(id) => { root.select_email(id); }
                 compose_message_action(action) => { root.compose_message_action(action); }
                 close_preview => { root.close_preview(); }
                 print_message => { root.print_message(); }
@@ -389,6 +407,9 @@ export component MailView inherits Rectangle {
                 selected_time: root.selected_time;
                 selected_to: root.selected_to;
                 selected_label: root.selected_label;
+                mail_labels: root.mail_labels;
+                mail-label-results: root.mail_label_results;
+                selected-label-count: root.selected_mail_label_count;
                 selected_initials: root.selected_initials;
                 selected_favicon: root.selected_favicon;
                 selected_has_favicon: root.selected_has_favicon;
@@ -399,6 +420,8 @@ export component MailView inherits Rectangle {
                 clipboard_request: root.clipboard_request;
                 clipboard_request_id: root.clipboard_request_id;
                 has_selected: root.has_selected;
+                previous-email-id: root.previous-email-id;
+                next-email-id: root.next-email-id;
                 selected_starred: root.selected_starred;
                 selected_unread: root.selected_unread;
                 selected_is_draft: root.selected_is_draft;
@@ -422,6 +445,10 @@ export component MailView inherits Rectangle {
                 surface-raised: root.surface-raised;
                 title-color: root.title-color;
                 message_action(action) => { root.message_action(action); }
+                toggle-mail-label(id, applied) => { root.toggle_mail_label(id, applied); }
+                save-mail-label(id, name, color) => { root.save_mail_label(id, name, color); }
+                search-mail-labels(query) => { root.search_mail_labels(query); }
+                select_email(id) => { root.select_email(id); }
                 compose_message_action(action) => { root.compose_message_action(action); }
                 close_preview => {
                     root.compact-page = "list";

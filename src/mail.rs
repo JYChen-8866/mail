@@ -8,8 +8,8 @@ use flectar_mail_core::{
         Account, AccountConfig, ActionKind, AddPasswordAccountArgs, Address, CalendarConnection,
         CalendarEvent, ConnectCalendarArgs, ContactRecordCursor, ContactRecordPage,
         CreateEventArgs, DraftAttachmentIn, FolderInfo, MailHistory, MailboxBadgeCounts,
-        MessageDetail, PerformActionArgs, PortableAccountConfig, Provider, QueueSendArgs,
-        QueueSendResult, SaveDraftArgs, Settings, ThreadCursor, ThreadSummary, View,
+        ActionParams, Label, MessageDetail, PerformActionArgs, PortableAccountConfig, Provider,
+        QueueSendArgs, QueueSendResult, SaveDraftArgs, Settings, ThreadCursor, ThreadSummary, View,
     },
 };
 #[cfg(test)]
@@ -54,6 +54,7 @@ pub struct MailMessage {
     pub unread: bool,
     pub starred: bool,
     pub has_attachments: bool,
+    pub labels: Vec<i64>,
     pub html: Option<String>,
     /// The row is showing its snippet while the core fetches the real MIME
     /// body. The shell uses this to retry a missed/late MailUpdated event.
@@ -83,6 +84,7 @@ impl MailMessage {
             unread: email.unread,
             starred: false,
             has_attachments: false,
+            labels: Vec::new(),
             html: Some(email.html.to_owned()),
             body_pending: false,
             sender_verification: String::new(),
@@ -138,6 +140,7 @@ pub struct ComposeSource {
 #[derive(Clone, Debug)]
 pub struct MailPage {
     pub messages: Vec<MailMessage>,
+    pub labels: Vec<Label>,
     pub mailboxes: Vec<MailboxEntry>,
     pub next_cursor: Option<ThreadCursor>,
     pub account_count: usize,
@@ -357,6 +360,11 @@ impl CoreMailSource {
             (results, None)
         };
 
+        let labels = self
+            .core
+            .list_labels()
+            .await
+            .map_err(|error| error.to_string())?;
         let messages = threads
             .into_iter()
             .filter_map(|thread| summary_to_message(thread, accounts, folder_label.as_str()))
@@ -364,6 +372,7 @@ impl CoreMailSource {
 
         Ok(MailPage {
             messages,
+            labels,
             mailboxes,
             next_cursor,
             account_count: accounts.len(),
@@ -712,6 +721,66 @@ impl CoreMailSource {
             })
             .await
             .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn perform_label_action(
+        &self,
+        thread_id: i64,
+        label_id: i64,
+        add: bool,
+    ) -> Result<(), String> {
+        self.core
+            .perform_action(PerformActionArgs {
+                kind: if add {
+                    ActionKind::AddLabel
+                } else {
+                    ActionKind::RemoveLabel
+                },
+                thread_ids: vec![thread_id],
+                params: Some(ActionParams {
+                    wake_at: None,
+                    target_folder_id: None,
+                    label_id: Some(label_id),
+                }),
+            })
+            .await
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn save_label(
+        &self,
+        id: Option<i64>,
+        name: &str,
+        color: &str,
+    ) -> Result<Label, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("enter a label name".to_owned());
+        }
+        let labels = self
+            .core
+            .list_labels()
+            .await
+            .map_err(|error| error.to_string())?;
+        let position = match id {
+            Some(id) => labels
+                .iter()
+                .find(|label| label.id == id)
+                .map(|label| label.position)
+                .ok_or_else(|| "label no longer exists".to_owned())?,
+            None => labels
+                .iter()
+                .filter(|label| !label.is_auto)
+                .map(|label| label.position)
+                .max()
+                .unwrap_or(-1)
+                .saturating_add(1),
+        };
+        self.core
+            .save_label(id, name.to_owned(), color.to_owned(), position)
+            .await
             .map_err(|error| error.to_string())
     }
 
@@ -1273,6 +1342,7 @@ fn summary_to_message(
         unread: thread.unread_count > 0,
         starred: thread.is_starred,
         has_attachments: thread.has_attachments,
+        labels: thread.labels,
         html: None,
         body_pending: true,
         sender_verification: String::new(),
@@ -1321,6 +1391,7 @@ fn detail_to_message(row: &MailMessage, message: &MessageDetail) -> MailMessage 
         unread: !message.is_read,
         starred: row.starred,
         has_attachments: !message.attachments.is_empty(),
+        labels: row.labels.clone(),
         html,
         body_pending: message.body_state != "cached",
         sender_verification: message.sender_verification.as_str().to_owned(),
