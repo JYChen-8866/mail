@@ -52,7 +52,22 @@ impl FontMetricsProvider for BlitzFontMetricsProvider {
             weight: stylo_to_parley::font_weight(font_styles.font_weight),
             style: stylo_to_parley::font_style(font_styles.font_style),
         });
+        // let fb_script = crate::swash_convert::script_to_fontique(script);
+        // let fb_language = locale.and_then(crate::swash_convert::locale_to_fontique);
+        // query.set_fallbacks(fontique::FallbackKey::new(fb_script, fb_language.as_ref()));
+
         let variations = stylo_to_parley::font_variations(&font_styles.font_variation_settings);
+        // let features = self.rcx.features(style.font_features).unwrap_or(&[]);
+
+        // fn name_of(font_ref: &skrifa::FontRef) -> String {
+        //     use skrifa::string::StringId;
+        //     font_ref
+        //         .localized_strings(StringId::POSTSCRIPT_NAME)
+        //         .english_or_first()
+        //         .unwrap()
+        //         .chars()
+        //         .collect()
+        // }
 
         fn find_font_for(query: &mut Query, ch: char) -> Option<QueryFont> {
             let mut font = None;

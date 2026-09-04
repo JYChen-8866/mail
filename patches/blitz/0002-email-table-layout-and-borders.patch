@@ -1,0 +1,385 @@
+diff --git a/crates/blitz-dom/src/layout/table.rs b/crates/blitz-dom/src/layout/table.rs
+index 7091784..7ff3810 100644
+--- a/crates/blitz-dom/src/layout/table.rs
++++ b/crates/blitz-dom/src/layout/table.rs
+@@ -8,7 +8,7 @@ use style::servo_arc::Arc as ServoArc;
+ use style::values::specified::box_::{DisplayInside, DisplayOutside};
+ use style::{
+     Atom, computed_values::border_collapse::T as BorderCollapse,
+-    computed_values::table_layout::T as TableLayout,
++    computed_values::table_layout::T as TableLayout, values::computed::BorderStyle,
+ };
+ use taffy::{
+     DetailedGridInfo, LayoutPartialTree as _, ResolveOrZero, TrackSizingFunction, style_helpers,
+@@ -89,6 +89,7 @@ pub(crate) fn build_table_context(
+ 
+     let border_collapse = stylo_styles.clone_border_collapse();
+     let border_spacing = stylo_styles.clone_border_spacing().0;
++    let table_border = stylo_styles.clone_border();
+ 
+     drop(stylo_styles);
+ 
+@@ -131,33 +132,39 @@ pub(crate) fn build_table_context(
+                 height: style_helpers::length(spacing_y),
+             }
+         }
+-        BorderCollapse::Collapse => first_cell_border
+-            .as_ref()
+-            .map(|border| {
+-                let x = border
+-                    .border_left_width
+-                    .0
+-                    .max(border.border_right_width.0)
+-                    .to_f32_px();
+-                let y = border
+-                    .border_top_width
+-                    .0
+-                    .max(border.border_bottom_width.0)
+-                    .to_f32_px();
+-                taffy::Size {
+-                    width: style_helpers::length(x),
+-                    height: style_helpers::length(y),
+-                }
+-            })
+-            .unwrap_or(taffy::Size::ZERO.map(style_helpers::length)),
++        // Collapsed borders are shared at row/column boundaries; they are not
++        // CSS grid gaps. In particular, a `none` border still computes a
++        // medium width, so turning that latent width into a gap fragments
++        // otherwise borderless layout tables. Visible borders retain their
++        // own box geometry below instead of being synthesized from a gap.
++        BorderCollapse::Collapse => taffy::Size::ZERO.map(style_helpers::length),
+     };
+ 
+     if border_collapse == BorderCollapse::Collapse {
++        let visible_width = |border_style: BorderStyle, width: app_units::Au| {
++            if border_style.none_or_hidden() {
++                0.0
++            } else {
++                width.to_f32_px()
++            }
++        };
+         style.border = taffy::Rect {
+-            left: style.gap.width,
+-            right: style.gap.width,
+-            top: style.gap.height,
+-            bottom: style.gap.height,
++            left: style_helpers::length(visible_width(
++                table_border.border_left_style,
++                table_border.border_left_width.0,
++            )),
++            right: style_helpers::length(visible_width(
++                table_border.border_right_style,
++                table_border.border_right_width.0,
++            )),
++            top: style_helpers::length(visible_width(
++                table_border.border_top_style,
++                table_border.border_top_width.0,
++            )),
++            bottom: style_helpers::length(visible_width(
++                table_border.border_bottom_style,
++                table_border.border_bottom_width.0,
++            )),
+         };
+     }
+ 
+@@ -260,89 +267,44 @@ pub(crate) fn collect_table_cells(
+             doc.nodes[node_id].children = children;
+         }
+         DisplayInside::TableCell => {
+-            // node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
+-            let stylo_style = &node.primary_styles().unwrap();
+-            let colspan: u16 = node
+-                .attr(local_name!("colspan"))
+-                .and_then(|val| val.parse().ok())
+-                .unwrap_or(1);
+-            let rowspan: u16 = node
+-                .attr(local_name!("rowspan"))
+-                .and_then(|val| val.parse::<u16>().ok())
+-                .map(|v| v.clamp(1, 65534))
+-                .unwrap_or(1);
+-            let mut style = stylo_taffy::to_taffy_style(stylo_style);
+-
+-            if first_cell_border.is_none() {
+-                *first_cell_border = Some(stylo_style.clone_border());
+-            }
+-
+-            if *row == 1 {
+-                let column = match style.size.width.tag() {
+-                    taffy::CompactLength::LENGTH_TAG => {
+-                        let len = style.size.width.value();
+-                        let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
+-                        let border = style.border.resolve_or_zero(None, resolve_calc_value);
+-                        match style.box_sizing {
+-                            taffy::BoxSizing::ContentBox => style_helpers::length(
+-                                len + padding.left + padding.right + border.left + border.right,
+-                            ),
+-                            taffy::BoxSizing::BorderBox => style_helpers::length(len),
+-                        }
+-                    }
+-                    taffy::CompactLength::PERCENT_TAG => {
+-                        if is_fixed {
+-                            style_helpers::percent(style.size.width.value())
+-                        } else {
+-                            style_helpers::auto()
+-                        }
+-                    }
+-                    taffy::CompactLength::AUTO_TAG => style_helpers::auto(),
+-                    // Dimension values are always length, percentage, auto or calc(),
+-                    // so any other tag is a calc() value. Pass it through so that
+-                    // Taffy resolves it against the table's inner width.
+-                    _ => style.size.width.into(),
+-                };
+-                columns.push(column);
+-            }
+-
+-            // Zero-out cell borders is BorderCollapse is Collapse
+-            // Borders are handled at the table level in this mode
+-            if border_collapse == BorderCollapse::Collapse {
+-                style.border = taffy::Rect::ZERO.map(style_helpers::length);
+-            }
+-
+-            // The margin properties do not apply to table-internal elements
+-            style.margin = taffy::Rect::ZERO.map(style_helpers::length);
+-
+-            // Let Taffy auto-place the column. Combined with
+-            // `grid_auto_flow: RowDense` set on the table root, each cell
+-            // scans from the first track in its row for a free position,
+-            // which makes cells automatically skip columns occupied by
+-            // rowspan cells from earlier rows.
+-            style.grid_column = taffy::Line {
+-                start: style_helpers::auto(),
+-                end: style_helpers::span(colspan),
+-            };
+-            style.grid_row = taffy::Line {
+-                start: style_helpers::line(*row as i16),
+-                end: style_helpers::span(rowspan),
+-            };
+-            style.size.width = style_helpers::auto();
+-            cells.push(TableCell { node_id, style });
+-
+-            *col += colspan;
++            push_table_cell(
++                doc,
++                node_id,
++                is_fixed,
++                border_collapse,
++                row,
++                col,
++                cells,
++                columns,
++                first_cell_border,
++                true,
++            );
+         }
+         DisplayInside::Flow
+         | DisplayInside::FlowRoot
+         | DisplayInside::Flex
+         | DisplayInside::Grid => {
+-            node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
+-            // Probably a table caption: ignore
+-            // println!(
+-            //     "Warning: ignoring non-table typed descendent of table ({:?})",
+-            //     display.inside()
+-            // );
++            if display.outside() == DisplayOutside::TableCaption {
++                node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
++            } else {
++                // CSS table fixup wraps an otherwise invalid child in
++                // anonymous row/cell boxes. Floats blockify `display:
++                // table-cell` elements into flow boxes, which is common in
++                // responsive email layouts. Treat the existing node as the
++                // anonymous grid cell so its complete subtree still lays out.
++                push_table_cell(
++                    doc,
++                    node_id,
++                    is_fixed,
++                    border_collapse,
++                    row,
++                    col,
++                    cells,
++                    columns,
++                    first_cell_border,
++                    false,
++                );
++            }
+         }
+         DisplayInside::TableColumnGroup | DisplayInside::TableColumn | DisplayInside::Table => {
+             node.remove_damage(CONSTRUCT_DESCENDENT | CONSTRUCT_FC | CONSTRUCT_BOX);
+@@ -355,6 +317,126 @@ pub(crate) fn collect_table_cells(
+     }
+ }
+ 
++#[allow(clippy::too_many_arguments)]
++fn push_table_cell(
++    doc: &mut BaseDocument,
++    node_id: NodeId,
++    is_fixed: bool,
++    border_collapse: BorderCollapse,
++    row: &mut u16,
++    col: &mut u16,
++    cells: &mut Vec<TableCell>,
++    columns: &mut Vec<TrackSizingFunction>,
++    first_cell_border: &mut Option<ServoArc<Border>>,
++    use_spans: bool,
++) {
++    // A table without an explicit row still gets an anonymous first row.
++    if *row == 0 {
++        *row = 1;
++        *col = 0;
++    }
++
++    let node = &mut doc.nodes[node_id];
++    let stylo_style = &node.primary_styles().unwrap();
++    let colspan: u16 = use_spans
++        .then(|| node.attr(local_name!("colspan")))
++        .flatten()
++        .and_then(|val| val.parse().ok())
++        .unwrap_or(1);
++    let rowspan: u16 = use_spans
++        .then(|| node.attr(local_name!("rowspan")))
++        .flatten()
++        .and_then(|val| val.parse::<u16>().ok())
++        .map(|v| v.clamp(1, 65534))
++        .unwrap_or(1);
++    let mut style = stylo_taffy::to_taffy_style(stylo_style);
++
++    if first_cell_border.is_none() {
++        *first_cell_border = Some(stylo_style.clone_border());
++    }
++
++    if *row == 1 {
++        let column = match style.size.width.tag() {
++            taffy::CompactLength::LENGTH_TAG => {
++                let len = style.size.width.value();
++                let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
++                let border = style.border.resolve_or_zero(None, resolve_calc_value);
++                match style.box_sizing {
++                    taffy::BoxSizing::ContentBox => style_helpers::length(
++                        len + padding.left + padding.right + border.left + border.right,
++                    ),
++                    taffy::BoxSizing::BorderBox => style_helpers::length(len),
++                }
++            }
++            taffy::CompactLength::PERCENT_TAG => {
++                if is_fixed {
++                    style_helpers::percent(style.size.width.value())
++                } else {
++                    style_helpers::auto()
++                }
++            }
++            taffy::CompactLength::AUTO_TAG => style_helpers::auto(),
++            // Dimension values are always length, percentage, auto or calc(),
++            // so any other tag is a calc() value. Pass it through so that
++            // Taffy resolves it against the table's inner width.
++            _ => style.size.width.into(),
++        };
++        columns.push(column);
++    }
++
++    // Keep only visible cell borders in their box geometry. CSS computes a
++    // non-zero width even when border-style is `none`, but that latent width
++    // must occupy no layout space. Blitz does not yet implement the full
++    // collapsed-border conflict algorithm; retaining real edges is a faithful
++    // fallback for asymmetric borders and avoids dropping them entirely.
++    if border_collapse == BorderCollapse::Collapse {
++        let border = stylo_style.clone_border();
++        let visible_width = |border_style: BorderStyle, width: app_units::Au| {
++            if border_style.none_or_hidden() {
++                0.0
++            } else {
++                width.to_f32_px()
++            }
++        };
++        style.border = taffy::Rect {
++            left: style_helpers::length(visible_width(
++                border.border_left_style,
++                border.border_left_width.0,
++            )),
++            right: style_helpers::length(visible_width(
++                border.border_right_style,
++                border.border_right_width.0,
++            )),
++            top: style_helpers::length(visible_width(
++                border.border_top_style,
++                border.border_top_width.0,
++            )),
++            bottom: style_helpers::length(visible_width(
++                border.border_bottom_style,
++                border.border_bottom_width.0,
++            )),
++        };
++    }
++
++    // The margin properties do not apply to table-internal elements.
++    style.margin = taffy::Rect::ZERO.map(style_helpers::length);
++
++    // Let Taffy auto-place the column. Combined with `RowDense` on the table
++    // root, each cell scans from the first track in its row for a free slot.
++    style.grid_column = taffy::Line {
++        start: style_helpers::auto(),
++        end: style_helpers::span(colspan),
++    };
++    style.grid_row = taffy::Line {
++        start: style_helpers::line(*row as i16),
++        end: style_helpers::span(rowspan),
++    };
++    style.size.width = style_helpers::auto();
++    cells.push(TableCell { node_id, style });
++
++    *col += colspan;
++}
++
+ pub struct RangeIter(Range<usize>);
+ 
+ impl Iterator for RangeIter {
+diff --git a/crates/blitz-paint/src/render/border.rs b/crates/blitz-paint/src/render/border.rs
+index bbe7fb0..2623f1b 100644
+--- a/crates/blitz-paint/src/render/border.rs
++++ b/crates/blitz-paint/src/render/border.rs
+@@ -525,6 +525,14 @@ impl ElementCx<'_, '_> {
+             return;
+         };
+ 
++        // Email layout tables overwhelmingly use `border-collapse: collapse`
++        // with the default `border-style: none`. CSS still computes a medium
++        // border width in that case, but it must not be painted. Treating that
++        // latent width as visible turns every row and cell into a black grid.
++        if border_style.border_top_style.none_or_hidden() {
++            return;
++        }
++
+         let outer_border_style = self.style.get_border();
+ 
+         let cols = PhysicalTracks::from_tracks(&grid_info.columns);
+@@ -562,13 +570,13 @@ impl ElementCx<'_, '_> {
+ 
+         // Draw horizontal outer borders
+         // Top border
+-        if outer_border_style.border_top_style != BorderStyle::Hidden {
++        if !outer_border_style.border_top_style.none_or_hidden() {
+             let shape =
+                 Rect::new(0.0, 0.0, inner_width, border_width).scale_from_origin(self.scale);
+             scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
+         }
+         // Bottom border
+-        if outer_border_style.border_bottom_style != BorderStyle::Hidden {
++        if !outer_border_style.border_bottom_style.none_or_hidden() {
+             let shape = Rect::new(0.0, inner_height, inner_width, inner_height + border_width)
+                 .scale_from_origin(self.scale);
+             scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
+@@ -589,13 +597,13 @@ impl ElementCx<'_, '_> {
+ 
+         // Draw vertical outer borders
+         // Left border
+-        if outer_border_style.border_left_style != BorderStyle::Hidden {
++        if !outer_border_style.border_left_style.none_or_hidden() {
+             let shape =
+                 Rect::new(0.0, 0.0, border_width, inner_height).scale_from_origin(self.scale);
+             scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);
+         }
+         // Right border
+-        if outer_border_style.border_right_style != BorderStyle::Hidden {
++        if !outer_border_style.border_right_style.none_or_hidden() {
+             let shape = Rect::new(inner_width, 0.0, inner_width + border_width, inner_height)
+                 .scale_from_origin(self.scale);
+             scene.fill(Fill::NonZero, self.transform, border_color, None, &shape);

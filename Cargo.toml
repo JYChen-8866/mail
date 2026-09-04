@@ -14,6 +14,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 [patch.crates-io]
 blitz-dom = { path = "crates/blitz-dom" }
+blitz-paint = { path = "crates/blitz-paint" }
 
 [package]
 name = "flectar-mail"
@@ -55,23 +56,26 @@ remote-content = []
 ios = ["slint/renderer-skia"]
 
 [dependencies]
-anyrender = "0.11"
-anyrender_vello = { version = "0.11", optional = true }
-anyrender_vello_cpu = "0.14"
-blitz-dom = "=0.3.0-beta.1"
-blitz-html = "=0.3.0-beta.1"
-blitz-paint = { path = "crates/blitz-paint" }
-blitz-traits = "=0.3.0-beta.1"
+anyrender = "0.13"
+anyrender_vello = { version = "0.14", optional = true }
+anyrender_vello_cpu = "0.17"
+blitz-dom = "=0.3.0-beta.2"
+blitz-html = "=0.3.0-beta.2"
+blitz-paint = "=0.3.0-beta.2"
+blitz-traits = "=0.3.0-beta.2"
 data-url = "0.3"
-parley = "0.10"
+parley = "0.11"
 pulldown-cmark = "0.13.4"
-vello = { version = "0.9", optional = true }
+vello = { version = "0.10", optional = true }
 # This native shell currently exposes keyword/FTS search, not local semantic
 # search. Do not link Candle, tokenizers, or Hugging Face into every AppImage.
 flectar-mail-core = { path = "crates/flectar-mail-core", default-features = false }
-# Slint 1.17 uses fontique on Linux. Enable its dlopen path so the application
-# also builds on distributions whose Fontconfig headers expose a newer ABI.
-fontique = { version = "0.10", features = ["fontconfig-dlopen"] }
+# Slint 1.17 and Blitz beta.2 use adjacent, semver-incompatible Fontique
+# releases that share the same native Fontconfig crate. Enable dynamic loading
+# on both so Cargo's shared native feature set cannot select an ABI that only
+# one consumer is prepared to use.
+fontique_0_10 = { package = "fontique", version = "=0.10.0", features = ["fontconfig-dlopen"] }
+fontique_0_11 = { package = "fontique", version = "=0.11.1", features = ["fontconfig-dlopen"] }
 dirs = "6"
 chrono.workspace = true
 cosmic-text = { version = "0.19", default-features = false, features = ["std", "swash"] }
@@ -123,11 +127,13 @@ auto_link_exclude_list = [
     "libstdc++.so*",
 ]
 
-# `fontique` deliberately enables a feature on Slint's transitive font stack;
-# `slint-build` is consumed by build.rs. Neither appears as a normal Rust path
-# in the application crate, so dependency scanners need these explicit uses.
+# The Fontique aliases deliberately align a feature across Slint's and Blitz's
+# transitive font stacks.
+# `slint-build` and the Windows-only `winresource` are consumed by build.rs.
+# These do not appear as normal Rust paths on every host, so dependency
+# scanners need the explicit exceptions.
 [package.metadata.cargo-machete]
-ignored = ["fontique", "slint-build"]
+ignored = ["fontique_0_10", "fontique_0_11", "slint-build", "winresource"]
 
 [build-dependencies]
 slint-build = "1.17"

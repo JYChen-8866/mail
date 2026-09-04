@@ -1,0 +1,39 @@
+diff --git a/crates/blitz-dom/Cargo.toml b/crates/blitz-dom/Cargo.toml
+index f0d2843..37c5683 100644
+--- a/crates/blitz-dom/Cargo.toml
++++ b/crates/blitz-dom/Cargo.toml
+@@ -211,3 +211,8 @@ optional = true
+ [target.'cfg(any(target_vendor = "apple"))'.dependencies.objc2]
+ version = "0.6"
+ features = ["disable-encoding-assertions"]
++
++# The direct dependency exists solely to unify this objc2 safety feature into
++# the Apple font stack; Blitz does not import objc2 itself.
++[package.metadata.cargo-machete]
++ignored = ["objc2"]
+diff --git a/crates/blitz-paint/Cargo.lock b/crates/blitz-paint/Cargo.lock
+index cad5dda..a41b6ac 100644
+--- a/crates/blitz-paint/Cargo.lock
++++ b/crates/blitz-paint/Cargo.lock
+@@ -145,7 +145,6 @@ dependencies = [
+  "blitz-dom",
+  "blitz-traits",
+  "color",
+- "euclid",
+  "kurbo",
+  "parley",
+  "peniko",
+diff --git a/crates/blitz-paint/Cargo.toml b/crates/blitz-paint/Cargo.toml
+index 9ffe126..461039f 100644
+--- a/crates/blitz-paint/Cargo.toml
++++ b/crates/blitz-paint/Cargo.toml
+@@ -64,9 +64,6 @@ default-features = false
+ [dependencies.color]
+ version = "0.3"
+ 
+-[dependencies.euclid]
+-version = "0.22"
+-
+ [dependencies.kurbo]
+ version = "0.13.1"
+ 

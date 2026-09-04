@@ -12,6 +12,7 @@ use blitz_traits::{
         MouseEventButton, MouseEventButtons, Point, PointerCoords, PointerDetails, UiEvent,
     },
     net::NetProvider,
+    node_id::NodeId,
     shell::{ColorScheme, Viewport},
 };
 use keyboard_types::{Code, Key, Location, Modifiers};
@@ -945,9 +946,15 @@ fn content_surface_height(document: &HtmlDocument) -> f32 {
     let mut content_bottom = 0.0_f32;
 
     document.visit(|_, node| {
+        // Blitz beta.2 stores box geometry only on document, element, and
+        // anonymous-block nodes. Text and comment nodes are represented by
+        // their parent's inline layout and must not be queried directly.
+        if node.stylo_element_data_opt().is_none() {
+            return;
+        }
         let is_viewport_box = node.data.is_element_with_tag_name(&local_name!("html"))
             || node.data.is_element_with_tag_name(&local_name!("body"));
-        let layout = &node.final_layout;
+        let layout = node.final_layout();
         let origin = node.absolute_position(0.0, 0.0);
 
         if !is_viewport_box && layout.size.height.is_finite() && origin.y.is_finite() {
@@ -1154,7 +1161,7 @@ fn browser_url(href: &str) -> Option<String> {
     }
 }
 
-fn anchor_url_for_node(document: &HtmlDocument, mut node_id: usize) -> Option<String> {
+fn anchor_url_for_node(document: &HtmlDocument, mut node_id: NodeId) -> Option<String> {
     loop {
         let node = document.get_node(node_id)?;
         if node.data.is_element_with_tag_name(&local_name!("a")) {
@@ -1177,9 +1184,9 @@ fn collect_email_links(document: &HtmlDocument, logical_width: f32) -> Vec<Email
         };
         let origin = node.absolute_position(0.0, 0.0);
         let content_origin_x =
-            origin.x + node.final_layout.padding.left + node.final_layout.border.left;
+            origin.x + node.final_layout().padding.left + node.final_layout().border.left;
         let content_origin_y =
-            origin.y + node.final_layout.padding.top + node.final_layout.border.top;
+            origin.y + node.final_layout().padding.top + node.final_layout().border.top;
 
         for line in text_layout.layout.lines() {
             let metrics = *line.metrics();
@@ -1273,7 +1280,7 @@ mod tests {
             .document
             .get_node(preheader_id)
             .expect("preheader node should exist");
-        assert_eq!(preheader.final_layout.size.height, 0.0);
+        assert_eq!(preheader.final_layout().size.height, 0.0);
 
         let content_id = prepared
             .document
@@ -1505,13 +1512,13 @@ mod tests {
             .expect("second cell node should exist");
 
         assert_eq!(
-            table.final_layout.size.height,
-            first.final_layout.size.height + second.final_layout.size.height,
+            table.final_layout().size.height,
+            first.final_layout().size.height + second.final_layout().size.height,
             "the table must contain only its rows, without synthetic border gaps"
         );
         assert_eq!(
             second.absolute_position(0.0, 0.0).y - first.absolute_position(0.0, 0.0).y,
-            first.final_layout.size.height,
+            first.final_layout().size.height,
             "CSS border widths with border-style:none must not become row spacing"
         );
     }
@@ -1555,7 +1562,8 @@ mod tests {
             )
             .expect("second CSS table cell node should exist");
         assert!(
-            cell.final_layout.size.height > 10.0 && second_cell.final_layout.size.height > 10.0,
+            cell.final_layout().size.height > 10.0
+                && second_cell.final_layout().size.height > 10.0,
             "a direct table-cell child needs a browser-generated anonymous row"
         );
         let first_origin = cell.absolute_position(0.0, 0.0);

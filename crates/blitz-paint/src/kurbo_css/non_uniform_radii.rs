@@ -10,6 +10,8 @@ use std::ops::{Mul, MulAssign};
 /// actually be the top, but `top` corners will always have a smaller y-value
 /// than `bottom` corners.
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
+// #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+// #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NonUniformRoundedRectRadii {
     /// The radii of the top-left corner.
     pub top_left: Vec2,

@@ -1,0 +1,48 @@
+diff --git a/crates/blitz-paint/src/text.rs b/crates/blitz-paint/src/text.rs
+index 358c558..ec2d8cf 100644
+--- a/crates/blitz-paint/src/text.rs
++++ b/crates/blitz-paint/src/text.rs
+@@ -40,16 +40,33 @@ pub(crate) fn draw_inline_backgrounds<'a>(
+                 continue;
+             }
+ 
+-            let Some(styles) = doc.get_node(node_id).and_then(|node| node.primary_styles()) else {
+-                continue;
+-            };
+-
+-            let current_color = styles.clone_color();
+-            let bg_color = styles
+-                .get_background()
+-                .background_color
+-                .resolve_to_absolute(&current_color)
+-                .as_srgb_color();
++            // Parley commonly associates a run with its text node. Backgrounds
++            // used by email CTA links live on an enclosing inline `<a>` or
++            // `<span>`, so walk toward the inline root until a painted
++            // background is found. Looking at the run node alone makes white
++            // button labels appear to vanish on the white message canvas.
++            let mut candidate_id = Some(node_id);
++            let mut bg_color = Color::TRANSPARENT;
++            while let Some(id) = candidate_id {
++                if id == inline_root_id {
++                    break;
++                }
++                let Some(node) = doc.get_node(id) else {
++                    break;
++                };
++                if let Some(styles) = node.primary_styles() {
++                    let current_color = styles.clone_color();
++                    bg_color = styles
++                        .get_background()
++                        .background_color
++                        .resolve_to_absolute(&current_color)
++                        .as_srgb_color();
++                    if bg_color != Color::TRANSPARENT {
++                        break;
++                    }
++                }
++                candidate_id = node.parent;
++            }
+             if bg_color == Color::TRANSPARENT {
+                 continue;
+             }

@@ -1,3 +1,4 @@
+use blitz_traits::node_id::NodeId;
 use std::{ops::Range, sync::Arc};
 
 use atomic_refcell::AtomicRefCell;
@@ -28,27 +29,35 @@ pub struct TableContext {
     pub style: taffy::Style<Atom>,
     pub cells: Vec<TableCell>,
     pub rows: Vec<TableRow>,
-    pub computed_grid_info: AtomicRefCell<Option<DetailedGridInfo>>,
+    pub computed_grid_info: AtomicRefCell<Option<DetailedGridInfo<Atom>>>,
     pub border_style: Option<ServoArc<Border>>,
     pub border_collapse: BorderCollapse,
 }
 
+// #[derive(Debug, Clone, Eq, PartialEq)]
+// pub enum TableItemKind {
+//     Row,
+//     Cell,
+// }
+
 #[derive(Debug, Clone)]
 pub struct TableCell {
-    node_id: usize,
+    // kind: TableItemKind,
+    node_id: NodeId,
     style: taffy::Style<Atom>,
 }
 
 #[derive(Debug, Clone)]
 pub struct TableRow {
-    pub node_id: usize,
+    // kind: TableItemKind,
+    pub node_id: NodeId,
     pub height: f32,
 }
 
 pub(crate) fn build_table_context(
     doc: &mut BaseDocument,
-    table_root_node_id: usize,
-) -> (TableContext, Vec<usize>) {
+    table_root_node_id: NodeId,
+) -> (TableContext, Vec<NodeId>) {
     let mut cells: Vec<TableCell> = Vec::new();
     let mut rows: Vec<TableRow> = Vec::new();
     let mut row = 0u16;
@@ -106,10 +115,23 @@ pub(crate) fn build_table_context(
     style.grid_template_rows = vec![style_helpers::auto(); row as usize];
 
     style.gap = match border_collapse {
-        BorderCollapse::Separate => taffy::Size {
-            width: style_helpers::length(border_spacing.width.px()),
-            height: style_helpers::length(border_spacing.height.px()),
-        },
+        BorderCollapse::Separate => {
+            // In the separated borders model, `border-spacing` also applies between
+            // the table border and the outermost cells, in addition to between cells.
+            let spacing_x = border_spacing.width.px();
+            let spacing_y = border_spacing.height.px();
+            let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
+            style.padding = taffy::Rect {
+                left: style_helpers::length(padding.left + spacing_x),
+                right: style_helpers::length(padding.right + spacing_x),
+                top: style_helpers::length(padding.top + spacing_y),
+                bottom: style_helpers::length(padding.bottom + spacing_y),
+            };
+            taffy::Size {
+                width: style_helpers::length(spacing_x),
+                height: style_helpers::length(spacing_y),
+            }
+        }
         // Collapsed borders are shared at row/column boundaries; they are not
         // CSS grid gaps. In particular, a `none` border still computes a
         // medium width, so turning that latent width into a gap fragments
@@ -166,7 +188,7 @@ pub(crate) fn build_table_context(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn collect_table_cells(
     doc: &mut BaseDocument,
-    node_id: usize,
+    node_id: NodeId,
     is_fixed: bool,
     border_collapse: BorderCollapse,
     row: &mut u16,
@@ -298,7 +320,7 @@ pub(crate) fn collect_table_cells(
 #[allow(clippy::too_many_arguments)]
 fn push_table_cell(
     doc: &mut BaseDocument,
-    node_id: usize,
+    node_id: NodeId,
     is_fixed: bool,
     border_collapse: BorderCollapse,
     row: &mut u16,
@@ -333,13 +355,18 @@ fn push_table_cell(
         *first_cell_border = Some(stylo_style.clone_border());
     }
 
-    // TODO: account for border/margin
     if *row == 1 {
         let column = match style.size.width.tag() {
             taffy::CompactLength::LENGTH_TAG => {
                 let len = style.size.width.value();
                 let padding = style.padding.resolve_or_zero(None, resolve_calc_value);
-                style_helpers::length(len + padding.left + padding.right)
+                let border = style.border.resolve_or_zero(None, resolve_calc_value);
+                match style.box_sizing {
+                    taffy::BoxSizing::ContentBox => style_helpers::length(
+                        len + padding.left + padding.right + border.left + border.right,
+                    ),
+                    taffy::BoxSizing::BorderBox => style_helpers::length(len),
+                }
             }
             taffy::CompactLength::PERCENT_TAG => {
                 if is_fixed {
@@ -349,7 +376,10 @@ fn push_table_cell(
                 }
             }
             taffy::CompactLength::AUTO_TAG => style_helpers::auto(),
-            _ => unreachable!(),
+            // Dimension values are always length, percentage, auto or calc(),
+            // so any other tag is a calc() value. Pass it through so that
+            // Taffy resolves it against the table's inner width.
+            _ => style.size.width.into(),
         };
         columns.push(column);
     }
@@ -387,6 +417,9 @@ fn push_table_cell(
             )),
         };
     }
+
+    // The margin properties do not apply to table-internal elements.
+    style.margin = taffy::Rect::ZERO.map(style_helpers::length);
 
     // Let Taffy auto-place the column. Combined with `RowDense` on the table
     // root, each cell scans from the first track in its row for a free slot.
@@ -454,7 +487,7 @@ impl taffy::LayoutPartialTree for TableTreeWrapper<'_> {
     }
 
     fn set_unrounded_layout(&mut self, node_id: taffy::NodeId, layout: &taffy::Layout) {
-        let node_id = taffy::NodeId::from(self.ctx.cells[usize::from(node_id)].node_id);
+        let node_id = crate::taffy_node_id(self.ctx.cells[usize::from(node_id)].node_id);
         self.doc.set_unrounded_layout(node_id, layout)
     }
 
@@ -464,7 +497,7 @@ impl taffy::LayoutPartialTree for TableTreeWrapper<'_> {
         inputs: taffy::tree::LayoutInput,
     ) -> taffy::LayoutOutput {
         let cell = &self.ctx.cells[usize::from(node_id)];
-        let node_id = taffy::NodeId::from(cell.node_id);
+        let node_id = crate::taffy_node_id(cell.node_id);
         self.doc.compute_child_layout(node_id, inputs)
     }
 }
@@ -491,7 +524,7 @@ impl taffy::LayoutGridContainer for TableTreeWrapper<'_> {
     fn set_detailed_grid_info(
         &mut self,
         _node_id: taffy::NodeId,
-        detailed_grid_info: DetailedGridInfo,
+        detailed_grid_info: DetailedGridInfo<Atom>,
     ) {
         *self.ctx.computed_grid_info.borrow_mut() = Some(detailed_grid_info);
     }

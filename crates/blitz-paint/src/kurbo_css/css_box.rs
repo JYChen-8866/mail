@@ -309,7 +309,7 @@ impl CssBox {
             path.extend(elements);
         }
 
-        for corner in [BottomLeft, BottomRight, TopRight] {
+        for corner in [/*TopLeft, */ BottomLeft, BottomRight, TopRight] {
             if self.is_sharp(corner, CssBoxKind::BorderBox) {
                 path.insert_point(self.corner(corner, CssBoxKind::BorderBox));
             } else {

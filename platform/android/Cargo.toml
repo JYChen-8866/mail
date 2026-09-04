@@ -1,5 +1,9 @@
 [workspace]
 
+[patch.crates-io]
+blitz-dom = { path = "../../crates/blitz-dom" }
+blitz-paint = { path = "../../crates/blitz-paint" }
+
 [profile.release]
 opt-level = 3
 lto = "thin"
