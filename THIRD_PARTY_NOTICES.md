@@ -16,7 +16,16 @@ the upstream source is <https://github.com/slint-ui/slint>.
 The locally patched `blitz-dom` and `blitz-paint` crates originate from the
 DioxusLabs Blitz project and are used under their `Apache-2.0` option. The
 license text is in [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt), and the
-upstream source is <https://github.com/DioxusLabs/blitz>.
+upstream source is <https://github.com/DioxusLabs/blitz>. The pinned release,
+checksums, patch rationale, and reproducible update procedure are documented in
+[`patches/blitz/README.md`](patches/blitz/README.md).
+
+## Phosphor Icons
+
+The bundled SVG icons in `ui/icons/phosphor` are sourced from
+[Phosphor Icons](https://github.com/phosphor-icons/core) at revision
+`2b75f3ad12b420c9504ef05df8d2564a28f8500e` and are licensed under the MIT
+License. Copyright © 2023 Phosphor Icons.
 
 ## Google Sans Flex
 
