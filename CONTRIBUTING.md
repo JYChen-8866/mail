@@ -52,10 +52,6 @@ UI changes must be rendered and inspected in light and dark themes. Responsive
 changes must also be checked at the documented phone and tablet preview sizes.
 Use fictional data in screenshots.
 
-Platform-specific changes should run the matching packaging or Gradle
-validation described in the
-[development guide](dev/DEVELOPMENT.md) and platform documentation.
-
 ## Licensing of accepted contributions
 
 Accepted contributions are published as part of Flectar Mail under

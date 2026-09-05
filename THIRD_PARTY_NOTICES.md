@@ -17,8 +17,9 @@ The locally patched `blitz-dom` and `blitz-paint` crates originate from the
 DioxusLabs Blitz project and are used under their `Apache-2.0` option. The
 license text is in [`LICENSES/Apache-2.0.txt`](LICENSES/Apache-2.0.txt), and the
 upstream source is <https://github.com/DioxusLabs/blitz>. The pinned release,
-checksums, patch rationale, and reproducible update procedure are documented in
-[`patches/blitz/README.md`](patches/blitz/README.md).
+checksums, and patch order are recorded in
+[`upstream.toml`](patches/blitz/upstream.toml) and
+[`series`](patches/blitz/series).
 
 ## Phosphor Icons
 
