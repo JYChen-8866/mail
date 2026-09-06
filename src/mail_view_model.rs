@@ -139,9 +139,14 @@ pub(super) fn apply_background_mail_page(
             next_cursor
         };
         state.total_count = state.total_count.max(state.messages.len());
+        // Check against `rendered_id` (what the reading pane actually shows),
+        // not `selected_id`: callers are free to clear or redirect the latter
+        // before refreshing, and doing so must not be able to make this look
+        // like "nothing needs repainting" when the previously-rendered
+        // message is in fact gone.
         let removed = state
-            .selected_id
-            .is_some_and(|selected_id| !state.messages.iter().any(|row| row.id == selected_id));
+            .rendered_id
+            .is_some_and(|rendered_id| !state.messages.iter().any(|row| row.id == rendered_id));
         if removed {
             state.selected_id = None;
             state.preview_closed = false;

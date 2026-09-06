@@ -203,9 +203,11 @@ pub(super) fn perform_selected_action(
     let core = core.ok_or_else(|| "mail core is unavailable".to_owned())?;
     let thread_id = thread_id.ok_or_else(|| "no message is selected".to_owned())?;
     runtime.block_on(core.perform_message_action(thread_id, action))?;
-    if matches!(action, "archive" | "spam" | "trash") {
-        state.borrow_mut().selected_id = None;
-    }
+    // Don't clear `selected_id` here: if the message is still visible after
+    // the action (e.g. archiving a starred message while viewing "Starred"),
+    // leaving it selected keeps the reading pane and the highlighted row in
+    // sync. `refresh_from_source` below repaints the pane on its own once it
+    // sees the message actually left the reloaded page.
     refresh_from_source(app, state, runtime, true)
 }
 
