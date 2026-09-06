@@ -2,6 +2,7 @@
 /target/
 /libs/
 /.artifacts/
+/tmp/
 /.devcontainer/
 *.AppImage
 /platform/android/gradle/.gradle/
