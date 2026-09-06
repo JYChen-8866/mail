@@ -1869,6 +1869,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                                 &mail_update_state,
                                 &mail_update_runtime,
                                 page,
+                                None,
                             ),
                             Err(error) => app.set_render_status(UiMessage::detail(
                                 "Background mail refresh failed: {}",
@@ -2905,7 +2906,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         }
                     }
                     if let Err(error) =
-                        refresh_from_source(&app, &sync_state, &sync_runtime, true)
+                        refresh_from_source(&app, &sync_state, &sync_runtime, true, None)
                     {
                         app.set_sync_status(UiMessage::detail(
                             "Sync finished, refresh failed: {}",
@@ -3028,7 +3029,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 i64::from(label_id),
                 applied,
             ))?;
-            refresh_from_source(&app, &state_for_label, &runtime_for_label, true)
+            refresh_from_source(&app, &state_for_label, &runtime_for_label, true, None)
         })();
         match result {
             Ok(()) if applied => app.set_render_status(UiMessage::plain("Label added.")),
@@ -3077,6 +3078,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 &state_for_save_label,
                 &runtime_for_save_label,
                 true,
+                None,
             )?;
             Ok(existing_id.is_some())
         })();
@@ -3824,7 +3826,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 *intent_for_save.borrow_mut() = ComposeIntent::default();
                 app.set_sync_status(message);
                 let _ =
-                    refresh_from_source(&app, &state_for_compose, &runtime_for_compose, true);
+                    refresh_from_source(&app, &state_for_compose, &runtime_for_compose, true, None);
             }
             Err(error) => {
                 let message = UiMessage::detail("Compose failed: {}", error);
@@ -4277,7 +4279,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             state.preview_closed = false;
         }
         if let Err(error) =
-            refresh_from_source(&app, &state_for_search, &runtime_for_search, false)
+            refresh_from_source(&app, &state_for_search, &runtime_for_search, false, None)
         {
             app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
         }
@@ -4324,7 +4326,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             state.preview_closed = false;
         }
         if let Err(error) =
-            refresh_from_source(&app, &state_for_scope, &runtime_for_scope, false)
+            refresh_from_source(&app, &state_for_scope, &runtime_for_scope, false, None)
         {
             app.set_render_status(UiMessage::detail("Mail refresh failed: {}", error));
         }

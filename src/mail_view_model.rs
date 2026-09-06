@@ -7,6 +7,7 @@ pub(super) fn refresh_from_source(
     state: &Rc<RefCell<InboxState>>,
     runtime: &tokio::runtime::Runtime,
     preserve_loaded_rows: bool,
+    acted_on_id: Option<i32>,
 ) -> Result<(), String> {
     let (using_core, core, scope, query) = {
         let state = state.borrow();
@@ -31,7 +32,7 @@ pub(super) fn refresh_from_source(
             false,
         ))?;
         if preserve_loaded_rows {
-            apply_background_mail_page(app, state, runtime, page);
+            apply_background_mail_page(app, state, runtime, page, acted_on_id);
             return Ok(());
         }
         let mut state = state.borrow_mut();
@@ -51,10 +52,20 @@ pub(super) fn refresh_from_source(
 /// document. Historical Gmail pages can then make newly indexed mail visible
 /// while scrolling, selection, and the retained Blitz renderer stay on the UI
 /// thread and avoid repeated body preparation.
+///
+/// The retained tail (everything beyond the refreshed head) is kept as-is
+/// without re-querying it, so it can go stale relative to the backend. `drop_id`
+/// names one message known to no longer belong in the current view (e.g. one
+/// the user just archived/spammed/trashed) — the only staleness this function
+/// actively corrects rather than a general tail re-sync, which a background
+/// refresh has no cheap way to verify. Pass `None` when no such message is
+/// known, i.e. for a refresh that isn't following up on an action taken on a
+/// specific message.
 fn merge_refreshed_mail_head(
     current: &[MailMessage],
     refreshed: Vec<MailMessage>,
     next_cursor: Option<ThreadCursor>,
+    drop_id: Option<i32>,
 ) -> (Vec<MailMessage>, bool) {
     if next_cursor.is_none() || current.len() <= PAGE_SIZE {
         return (refreshed, false);
@@ -77,6 +88,7 @@ fn merge_refreshed_mail_head(
         current[tail_start..]
             .iter()
             .filter(|message| known.insert(message.id))
+            .filter(|message| Some(message.id) != drop_id)
             .cloned(),
     );
     let retained_tail = merged.len() > refreshed_len;
@@ -88,6 +100,7 @@ pub(super) fn apply_background_mail_page(
     state: &Rc<RefCell<InboxState>>,
     runtime: &tokio::runtime::Runtime,
     page: mail::MailPage,
+    acted_on_id: Option<i32>,
 ) {
     let mail::MailPage {
         mut messages,
@@ -130,7 +143,7 @@ pub(super) fn apply_background_mail_page(
 
         let old_next_cursor = state.next_cursor;
         let (merged, retained_tail) =
-            merge_refreshed_mail_head(&state.messages, messages, next_cursor);
+            merge_refreshed_mail_head(&state.messages, messages, next_cursor, acted_on_id);
         state.messages = merged;
         state.mailboxes = mailboxes;
         state.next_cursor = if retained_tail {
@@ -1065,6 +1078,7 @@ mod tests {
                 last_message_at: 0,
                 thread_id: 23,
             }),
+            None,
         );
 
         assert!(retained_tail);
@@ -1080,9 +1094,53 @@ mod tests {
     fn exhausted_head_refresh_replaces_the_old_tail() {
         let current = (1..=50).map(message).collect::<Vec<_>>();
         let refreshed = (1..=12).map(message).collect::<Vec<_>>();
-        let (merged, retained_tail) = merge_refreshed_mail_head(&current, refreshed, None);
+        let (merged, retained_tail) = merge_refreshed_mail_head(&current, refreshed, None, None);
         assert!(!retained_tail);
         assert_eq!(merged.len(), 12);
+    }
+
+    #[test]
+    fn acted_on_message_beyond_the_first_page_is_dropped_from_the_retained_tail() {
+        // 50 messages loaded; the acted-on message (id 40) sits in the
+        // retained tail, well beyond the refreshed head.
+        let current = (1..=50).map(message).collect::<Vec<_>>();
+        let refreshed = (1..=23).map(message).collect::<Vec<_>>();
+        let (merged, retained_tail) = merge_refreshed_mail_head(
+            &current,
+            refreshed,
+            Some(ThreadCursor {
+                last_message_at: 0,
+                thread_id: 23,
+            }),
+            Some(40),
+        );
+
+        assert!(retained_tail);
+        assert!(
+            merged.iter().all(|row| row.id != 40),
+            "the archived/spammed/trashed message must not survive in the retained tail"
+        );
+        assert_eq!(merged.len(), 49);
+    }
+
+    #[test]
+    fn acted_on_message_still_present_in_the_refreshed_head_is_kept() {
+        // The acted-on message is in the freshly refreshed head, not the
+        // retained tail (e.g. it's still visible in the current scope) — it
+        // must not be dropped just because `drop_id` names it.
+        let current = (1..=50).map(message).collect::<Vec<_>>();
+        let refreshed = (1..=23).map(message).collect::<Vec<_>>();
+        let (merged, _) = merge_refreshed_mail_head(
+            &current,
+            refreshed,
+            Some(ThreadCursor {
+                last_message_at: 0,
+                thread_id: 23,
+            }),
+            Some(10),
+        );
+
+        assert!(merged.iter().any(|row| row.id == 10));
     }
 
     #[test]
