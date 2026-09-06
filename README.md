@@ -78,7 +78,8 @@ Tauri or Wails.
 
 Choose the workspace that fits the way you handle email. Keep the detailed
 three-pane layout, switch to a streamlined minimal view, choose a light or dark
-theme, and show or hide sender avatars.
+theme, select a built-in color palette or create a custom one, and show or hide
+sender avatars.
 
 The full workspace keeps your folders, message list, and selected email visible
 together. The minimal layout reduces visual noise and gives each part of your
@@ -95,6 +96,19 @@ inbox more room when you need it.
 | Full workspace | Minimal workspace |
 | --- | --- |
 | ![Flectar Mail full desktop workspace in dark mode](resources/screenshots/desktop-dark.png) | ![Flectar Mail minimal desktop workspace in dark mode](resources/screenshots/desktop-minimal-dark.png) |
+
+### Color palettes
+
+| Teal | Green | Purple | Custom |
+| --- | --- | --- | --- |
+| ![Flectar Mail teal palette in light mode](resources/screenshots/desktop-teal-light.png) | ![Flectar Mail green palette in light mode](resources/screenshots/desktop-green-light.png) | ![Flectar Mail purple palette in light mode](resources/screenshots/desktop-purple-light.png) | ![Flectar Mail custom palette in light mode](resources/screenshots/desktop-light.png) |
+| ![Flectar Mail teal palette in dark mode](resources/screenshots/desktop-teal-dark.png) | ![Flectar Mail green palette in dark mode](resources/screenshots/desktop-green-dark.png) | ![Flectar Mail purple palette in dark mode](resources/screenshots/desktop-purple-dark.png) | ![Flectar Mail custom palette in dark mode](resources/screenshots/desktop-dark.png) |
+
+### Calendar, contacts, and files
+
+| Calendar | Contacts | Files (WebDAV/JMAP) |
+| --- | --- | --- |
+| ![Flectar Mail calendar](resources/screenshots/desktop-calendar-light.png) | ![Flectar Mail contacts](resources/screenshots/desktop-contacts-light.png) | **Coming soon** |
 
 ### Made for smaller screens
 
