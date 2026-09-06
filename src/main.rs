@@ -762,6 +762,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             .build()?,
     );
 
+    // Register the deterministic emoji face before any initial text is measured.
+    configure_emoji_font_fallback()?;
+
     // Construct and map the window before opening or migrating either database.
     // Until startup completes it paints the inert mailbox shell; mapping now
     // avoids making callback wiring part of first-window latency.
@@ -4448,6 +4451,30 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     // documented multi-component pattern; calling AppWindow::run() here would
     // redundantly show the main window a second time.
     slint::run_event_loop()?;
+    Ok(())
+}
+
+/// Put the bundled outline emoji face in Parley's dedicated emoji slot.
+///
+/// Slint's software renderer does not reliably rasterize the color emoji fonts
+/// supplied by every platform. Parley already detects emoji clusters while
+/// shaping mixed text, so configuring its generic family keeps the normal UI
+/// font and emoji font separate without rewriting folder names into image runs.
+fn configure_emoji_font_fallback() -> Result<(), Box<dyn std::error::Error>> {
+    use slint::fontique_010::fontique::{Blob, GenericFamily};
+
+    const NOTO_EMOJI: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/resources/fonts/noto-emoji/NotoEmoji[wght].ttf"
+    ));
+
+    let mut fonts = slint::fontique_010::shared_collection();
+    let noto_emoji = fonts
+        .register_fonts(Blob::new(Arc::new(NOTO_EMOJI)), None)
+        .first()
+        .map(|(family, _)| *family)
+        .ok_or_else(|| std::io::Error::other("bundled Noto Emoji font is invalid"))?;
+    fonts.set_generic_families(GenericFamily::Emoji, std::iter::once(noto_emoji));
     Ok(())
 }
 

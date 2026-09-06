@@ -51,12 +51,16 @@ done
 
 lipo -create -output "$TARGET_BUILD_DIR/$EXECUTABLE_PATH" "${executables[@]}"
 
-# Google Sans Flex is embedded in the executable. Ship its OFL notice in the
-# application bundle as required for redistributed copies of the font.
-font_license_dir="$TARGET_BUILD_DIR/${UNLOCALIZED_RESOURCES_FOLDER_PATH:?}/Licenses/Google Sans Flex"
-mkdir -p "$font_license_dir"
-cp "$project_dir/resources/fonts/google-sans-flex/OFL.txt" "$font_license_dir/OFL.txt"
-cp "$project_dir/resources/fonts/google-sans-flex/README.md" "$font_license_dir/README.md"
+# The UI fonts are embedded in the executable. Ship their OFL notices in the
+# application bundle as required for redistributed copies of the fonts.
+font_license_root="$TARGET_BUILD_DIR/${UNLOCALIZED_RESOURCES_FOLDER_PATH:?}/Licenses"
+google_font_license_dir="$font_license_root/Google Sans Flex"
+emoji_font_license_dir="$font_license_root/Noto Emoji"
+mkdir -p "$google_font_license_dir" "$emoji_font_license_dir"
+cp "$project_dir/resources/fonts/google-sans-flex/OFL.txt" "$google_font_license_dir/OFL.txt"
+cp "$project_dir/resources/fonts/google-sans-flex/README.md" "$google_font_license_dir/README.md"
+cp "$project_dir/resources/fonts/noto-emoji/OFL.txt" "$emoji_font_license_dir/OFL.txt"
+cp "$project_dir/resources/fonts/noto-emoji/README.md" "$emoji_font_license_dir/README.md"
 
 if [[ -n "${DWARF_DSYM_FOLDER_PATH:-}" && -n "${DWARF_DSYM_FILE_NAME:-}" ]]; then
   mkdir -p "$DWARF_DSYM_FOLDER_PATH"

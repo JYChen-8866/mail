@@ -113,6 +113,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force target/package/windows | Out-Null
           New-Item -ItemType Directory -Force "target/package/windows/Licenses/Google Sans Flex" | Out-Null
+          New-Item -ItemType Directory -Force "target/package/windows/Licenses/Noto Emoji" | Out-Null
           Copy-Item target/release/flectar-mail.exe target/package/windows/
           Copy-Item README.md target/package/windows/
           Copy-Item LICENSE target/package/windows/
@@ -120,6 +121,8 @@ jobs:
           Copy-Item THIRD_PARTY_NOTICES.md target/package/windows/
           Copy-Item resources/fonts/google-sans-flex/OFL.txt "target/package/windows/Licenses/Google Sans Flex/"
           Copy-Item resources/fonts/google-sans-flex/README.md "target/package/windows/Licenses/Google Sans Flex/"
+          Copy-Item resources/fonts/noto-emoji/OFL.txt "target/package/windows/Licenses/Noto Emoji/"
+          Copy-Item resources/fonts/noto-emoji/README.md "target/package/windows/Licenses/Noto Emoji/"
           Compress-Archive -Path target/package/windows/* -DestinationPath target/flectar-mail-windows-x64.zip -Force
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
