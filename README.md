@@ -50,6 +50,30 @@ fraction of the memory of a typical web-based mail client.
 - **Native and open source.** Built from the ground up with Rust. It is not a
   browser wrapped in a window, and it is released under the AGPLv3.
 
+## Experimental HTML rendering
+
+> [!WARNING]
+> HTML email rendering is currently the most experimental part of Flectar Mail.
+> Some messages, especially those with complex or unusual markup and CSS, may
+> not render correctly yet.
+
+To keep the client fully native and memory usage around 20 MB, Flectar Mail
+renders email HTML with [Blitz](https://github.com/DioxusLabs/blitz), a Rust
+HTML/CSS renderer from the Dioxus team, instead of embedding a browser or
+WebView.
+
+As far as we know, Flectar Mail is one of the first projects using Blitz for
+arbitrary, real-world email HTML. Email markup contains plenty of unusual HTML
+and CSS, so this pushes the renderer into demanding territory. We currently
+carry several patches on top of Blitz and hope to upstream as much of that work
+as possible over time.
+
+If you find an email that renders incorrectly, please
+[report it](https://github.com/flectar/mail/issues). This approach is still
+experimental, but it is also a major reason Flectar Mail can remain so
+lightweight compared with WebView-based clients built with frameworks such as
+Tauri or Wails.
+
 ## Make it yours
 
 Choose the workspace that fits the way you handle email. Keep the detailed
@@ -83,8 +107,15 @@ messages, events, and contacts the full screen when they need it.
 
 ## Get Flectar Mail
 
-Flectar Mail is currently in public preview and is not yet stable. Download the
-latest build from [GitHub Releases](https://github.com/flectar/mail/releases/latest):
+Flectar Mail is currently in development and is not yet stable.
+
+> [!NOTE]
+> We are waiting for Google and Microsoft to complete OAuth app verification
+> before publishing the first preview release with Gmail, Outlook, and
+> Microsoft 365 OAuth configured by default.
+
+Once the first preview is available, download the latest build from
+[GitHub Releases](https://github.com/flectar/mail/releases/latest):
 
 - **Linux x64:** AppImage or Debian/Ubuntu `.deb` package
 - **Windows x64:** Portable ZIP
@@ -105,5 +136,15 @@ edition. The client is licensed under the
 [GNU Affero General Public License v3](LICENSE). Read the
 [licensing overview](LICENSING.md) for the practical details, or see
 [CONTRIBUTING.md](CONTRIBUTING.md) to help shape the project.
+
+## Acknowledgements
+
+Flectar Mail is made possible by the work of these projects and their
+contributors:
+
+- [Slint](https://slint.dev/), the native UI toolkit that powers the Flectar
+  Mail interface.
+- [Blitz](https://github.com/DioxusLabs/blitz), the Rust HTML/CSS renderer from
+  the Dioxus team that powers the email reading experience.
 
 ---
