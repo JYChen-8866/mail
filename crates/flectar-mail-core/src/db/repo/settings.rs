@@ -44,6 +44,8 @@ mod tests {
         assert!(d.show_avatars);
         assert_eq!(d.workspace_layout, "default");
         assert_eq!(d.calendar_week_start, "monday");
+        assert_eq!(d.theme_preset, "default");
+        assert_eq!(d.custom_theme.light_primary, "#0969DA");
 
         let mut s = d.clone();
         s.theme = "carbon".into();
@@ -52,6 +54,8 @@ mod tests {
         s.monochrome_sidebar_icons = true;
         s.show_avatars = false;
         s.workspace_layout = "minimal".into();
+        s.theme_preset = "teal".into();
+        s.custom_theme.light_primary = "#006B7A".into();
         s.signature_list.push(crate::models::Signature {
             id: "a".into(),
             account_id: 1,
@@ -85,6 +89,8 @@ mod tests {
         assert!(back.monochrome_sidebar_icons);
         assert!(!back.show_avatars);
         assert_eq!(back.workspace_layout, "minimal");
+        assert_eq!(back.theme_preset, "teal");
+        assert_eq!(back.custom_theme.light_primary, "#006B7A");
         assert_eq!(back.signature_list.len(), 1);
         assert_eq!(back.signature_list[0].html, "<b>Dean</b>");
         assert_eq!(back.ai_automation_rules, s.ai_automation_rules);
@@ -115,6 +121,8 @@ mod tests {
         assert!(s.show_avatars);
         assert_eq!(s.workspace_layout, "default");
         assert_eq!(s.calendar_week_start, "monday");
+        assert_eq!(s.theme_preset, "default");
+        assert_eq!(s.custom_theme, crate::models::CustomTheme::default());
         assert!(s.notifications_enabled);
         assert_eq!(s.sync_interval_minutes, 5);
         assert!(s.auto_advance);

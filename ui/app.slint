@@ -4,6 +4,7 @@ import "../resources/fonts/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,RON
 
 import { Palette } from "std-widgets.slint";
 import { TypeScale } from "typography.slint";
+export { AppTheme, ThemeUtilities } from "design-system.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
 import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactAccountRow, ContactRow, EmailLink, EmailRow, EmailTile, LocalizedMessage, MailboxRow, MailLabelRow } from "models.slint";
@@ -138,6 +139,12 @@ export global I18n {
         if (key == "Theme updated for this session.") { return @tr("Theme updated for this session."); }
         if (key == "Theme preference saved.") { return @tr("Theme preference saved."); }
         if (key == "Could not save theme: {}") { return @tr("Could not save theme: {}", argument); }
+        if (key == "Theme palette updated for this session.") { return @tr("Theme palette updated for this session."); }
+        if (key == "Theme palette saved.") { return @tr("Theme palette saved."); }
+        if (key == "Could not save theme palette: {}") { return @tr("Could not save theme palette: {}", argument); }
+        if (key == "Custom theme updated for this session.") { return @tr("Custom theme updated for this session."); }
+        if (key == "Custom theme saved.") { return @tr("Custom theme saved."); }
+        if (key == "Could not save custom theme: {}") { return @tr("Could not save custom theme: {}", argument); }
         if (key == "Language updated for this session.") { return @tr("Language updated for this session."); }
         if (key == "Language preference saved.") { return @tr("Language preference saved."); }
         if (key == "Could not save language: {}") { return @tr("Could not save language: {}", argument); }
@@ -400,6 +407,8 @@ export component AppWindow inherits Window {
     callback print_message();
     callback open_message_in_browser();
     callback save_theme(string);
+    callback save_theme_preset(string);
+    callback save_custom_theme(color, color, color, color, color, color, color, color, color, color) -> bool;
     callback save_avatar_visibility(bool);
     callback save_workspace_layout(string);
     callback save_language(string);
@@ -1151,6 +1160,32 @@ export component AppWindow inherits Window {
             ms_client_id <=> root.ms_client_id;
             custom_oauth_open <=> root.custom_oauth_open;
             save_theme(mode) => { root.save_theme(mode); }
+            save_theme_preset(preset) => { root.save_theme_preset(preset); }
+            save_custom_theme(
+                light-primary,
+                light-page,
+                light-surface,
+                light-text,
+                light-border,
+                dark-primary,
+                dark-page,
+                dark-surface,
+                dark-text,
+                dark-border,
+            ) => {
+                return root.save_custom_theme(
+                    light-primary,
+                    light-page,
+                    light-surface,
+                    light-text,
+                    light-border,
+                    dark-primary,
+                    dark-page,
+                    dark-surface,
+                    dark-text,
+                    dark-border,
+                );
+            }
             save_avatar_visibility(enabled) => { root.save_avatar_visibility(enabled); }
             save_workspace_layout(mode) => { root.save_workspace_layout(mode); }
             save_language(language) => { root.save_language(language); }

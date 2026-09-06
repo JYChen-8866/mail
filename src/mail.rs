@@ -5,11 +5,12 @@ use flectar_mail_core::{
     config::Paths,
     events::CoreEvent,
     models::{
-        Account, AccountConfig, ActionKind, AddPasswordAccountArgs, Address, CalendarConnection,
-        CalendarEvent, ConnectCalendarArgs, ContactRecordCursor, ContactRecordPage,
-        CreateEventArgs, DraftAttachmentIn, FolderInfo, MailHistory, MailboxBadgeCounts,
-        ActionParams, Label, MessageDetail, PerformActionArgs, PortableAccountConfig, Provider,
-        QueueSendArgs, QueueSendResult, SaveDraftArgs, Settings, ThreadCursor, ThreadSummary, View,
+        Account, AccountConfig, ActionKind, ActionParams, AddPasswordAccountArgs, Address,
+        CalendarConnection, CalendarEvent, ConnectCalendarArgs, ContactRecordCursor,
+        ContactRecordPage, CreateEventArgs, CustomTheme, DraftAttachmentIn, FolderInfo, Label,
+        MailHistory, MailboxBadgeCounts, MessageDetail, PerformActionArgs, PortableAccountConfig,
+        Provider, QueueSendArgs, QueueSendResult, SaveDraftArgs, Settings, ThreadCursor,
+        ThreadSummary, View,
     },
 };
 #[cfg(test)]
@@ -592,6 +593,28 @@ impl CoreMailSource {
             _ => "system",
         }
         .to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn set_theme_preset(&self, preset: &str) -> Result<(), String> {
+        let mut settings = self.load_settings().await?;
+        settings.theme_preset = match preset {
+            "teal" | "green" | "purple" | "custom" => preset,
+            _ => "default",
+        }
+        .to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn set_custom_theme(&self, custom_theme: CustomTheme) -> Result<(), String> {
+        let mut settings = self.load_settings().await?;
+        settings.custom_theme = custom_theme;
         self.core
             .set_settings(settings)
             .await

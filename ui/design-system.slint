@@ -34,41 +34,115 @@ export global LayoutMetrics {
 // button and view. Palette.color-scheme is set by AppWindow's theme setting,
 // so all consumers update together when the user changes appearance.
 export global AppTheme {
+    // Color scheme and palette are separate preferences. This lets every
+    // preset follow the OS while a custom palette keeps independent light and
+    // dark values. The default branch below is the original Flectar palette.
+    in-out property <string> preset: "default";
+    in-out property <color> custom-light-primary: #0969da;
+    in-out property <color> custom-light-page-bg: #f2f2f0;
+    in-out property <color> custom-light-surface: #ffffff;
+    in-out property <color> custom-light-text: #202120;
+    in-out property <color> custom-light-border: #d9d9d6;
+    in-out property <color> custom-dark-primary: #0969da;
+    in-out property <color> custom-dark-page-bg: #111213;
+    in-out property <color> custom-dark-surface: #18191a;
+    in-out property <color> custom-dark-text: #f3f3f2;
+    in-out property <color> custom-dark-border: #3a3b3c;
+
     out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
-    out property <color> page-bg: dark ? #111213 : #f2f2f0;
-    out property <color> surface: dark ? #18191a : #ffffff;
-    out property <color> surface-raised: dark ? #131415 : #fafaf8;
-    out property <color> sidebar-bg: dark ? #151617 : #f0f0ee;
-    out property <color> control-bg: dark ? #232425 : #f1f1ef;
-    out property <color> muted-control-bg: dark ? #242526 : #e8e8e5;
+
+    // Each non-default preset starts from five user-facing foundation colors.
+    // The rest of the semantic tokens are derived consistently, so adding a
+    // component never expands the persisted theme schema.
+    private property <color> themed-primary: preset == "teal" ? #006b7a
+        : preset == "green" ? #2f6f44
+        : preset == "purple" ? #78418a
+        : dark ? custom-dark-primary : custom-light-primary;
+    private property <color> themed-page-bg: preset == "teal" ? (dark ? #0b1519 : #edf5f7)
+        : preset == "green" ? (dark ? #101711 : #f1f5ef)
+        : preset == "purple" ? (dark ? #171119 : #f6f1f7)
+        : dark ? custom-dark-page-bg : custom-light-page-bg;
+    private property <color> themed-surface: preset == "teal" ? (dark ? #122026 : #fbfefe)
+        : preset == "green" ? (dark ? #182019 : #fcfdfb)
+        : preset == "purple" ? (dark ? #201722 : #fdfbfe)
+        : dark ? custom-dark-surface : custom-light-surface;
+    private property <color> themed-text: preset == "teal" ? (dark ? #e5f0f2 : #173039)
+        : preset == "green" ? (dark ? #e9f0e6 : #213026)
+        : preset == "purple" ? (dark ? #f1e8f3 : #332537)
+        : dark ? custom-dark-text : custom-light-text;
+    private property <color> themed-border: preset == "teal" ? (dark ? #294047 : #c8dadd)
+        : preset == "green" ? (dark ? #344039 : #ccd8c8)
+        : preset == "purple" ? (dark ? #46354a : #dfd0e2)
+        : dark ? custom-dark-border : custom-light-border;
+    private property <color> themed-accent: dark
+        ? themed-primary.mix(white, 0.62)
+        : themed-primary;
+
+    out property <color> page-bg: preset == "default" ? (dark ? #111213 : #f2f2f0) : themed-page-bg;
+    out property <color> surface: preset == "default" ? (dark ? #18191a : #ffffff) : themed-surface;
+    out property <color> surface-raised: preset == "default" ? (dark ? #131415 : #fafaf8)
+        : themed-surface.mix(themed-page-bg, 0.72);
+    out property <color> sidebar-bg: preset == "default" ? (dark ? #151617 : #f0f0ee)
+        : themed-page-bg.mix(themed-surface, 0.72);
+    out property <color> control-bg: preset == "default" ? (dark ? #232425 : #f1f1ef)
+        : themed-surface.mix(themed-text, dark ? 0.90 : 0.94);
+    out property <color> muted-control-bg: preset == "default" ? (dark ? #242526 : #e8e8e5)
+        : themed-surface.mix(themed-text, dark ? 0.86 : 0.90);
     // Product actions deliberately keep the established Flectar blue in both
     // themes. The lighter dark-theme accent remains available for selection,
     // focus, and small icons where extra contrast is useful.
-    out property <color> primary: #0969da;
-    out property <color> primary-hover: #1675df;
-    out property <color> primary-pressed: #0757b5;
-    out property <color> accent: dark ? #5ca3ff : #0969da;
-    out property <color> accent-hover: dark ? #74b1ff : #1675df;
-    out property <color> accent-pressed: dark ? #428de8 : #0757b5;
-    out property <color> accent-soft: dark ? #26364a : #dcecff;
-    out property <color> accent-pale: dark ? #1c2a3a : #edf6ff;
-    out property <color> selected-row: dark ? #252627 : #e9e9e6;
-    out property <color> avatar-bg: dark ? #303132 : #e6e6e2;
-    out property <color> avatar-selected-bg: dark ? #354860 : #d5e8ff;
-    out property <color> border: dark ? #292a2b : #d9d9d6;
-    out property <color> border-subtle: dark ? #232425 : #e6e6e2;
-    out property <color> control-border: dark ? #3a3b3c : #d2d3d0;
-    out property <color> input-border: dark ? #383a3b : #cccdca;
-    out property <color> title: dark ? #f3f3f2 : #202120;
-    out property <color> heading: dark ? #e4e4e2 : #30312f;
-    out property <color> body: dark ? #c5c6c3 : #4b4c49;
-    out property <color> secondary: dark ? #a0a19e : #72736f;
-    out property <color> muted: dark ? #80817e : #888985;
-    out property <color> faint: dark ? #737471 : #949591;
-    out property <color> disabled-bg: dark ? #202122 : #ededeb;
-    out property <color> input-bg: dark ? #1c1d1e : #ffffff;
-    out property <color> placeholder: dark ? #747572 : #90918d;
+    out property <color> primary: preset == "default" ? #0969da : themed-primary;
+    out property <color> primary-hover: preset == "default" ? #1675df : themed-primary.mix(white, 0.90);
+    out property <color> primary-pressed: preset == "default" ? #0757b5 : themed-primary.mix(black, 0.82);
+    out property <color> accent: preset == "default" ? (dark ? #5ca3ff : #0969da) : themed-accent;
+    out property <color> accent-hover: preset == "default" ? (dark ? #74b1ff : #1675df) : themed-accent.mix(white, 0.88);
+    out property <color> accent-pressed: preset == "default" ? (dark ? #428de8 : #0757b5) : themed-accent.mix(black, 0.84);
+    out property <color> accent-soft: preset == "default" ? (dark ? #26364a : #dcecff)
+        : themed-accent.mix(themed-surface, dark ? 0.20 : 0.14);
+    out property <color> accent-pale: preset == "default" ? (dark ? #1c2a3a : #edf6ff)
+        : themed-accent.mix(themed-surface, dark ? 0.11 : 0.07);
+    out property <color> selected-row: preset == "default" ? (dark ? #252627 : #e9e9e6)
+        : themed-surface.mix(themed-text, dark ? 0.90 : 0.93);
+    out property <color> avatar-bg: preset == "default" ? (dark ? #303132 : #e6e6e2)
+        : themed-surface.mix(themed-text, dark ? 0.84 : 0.89);
+    out property <color> avatar-selected-bg: preset == "default" ? (dark ? #354860 : #d5e8ff)
+        : themed-accent.mix(themed-surface, dark ? 0.28 : 0.18);
+    out property <color> border: preset == "default" ? (dark ? #292a2b : #d9d9d6) : themed-border;
+    out property <color> border-subtle: preset == "default" ? (dark ? #232425 : #e6e6e2)
+        : themed-border.mix(themed-surface, 0.58);
+    out property <color> control-border: preset == "default" ? (dark ? #3a3b3c : #d2d3d0)
+        : themed-border.mix(themed-text, dark ? 0.76 : 0.88);
+    out property <color> input-border: preset == "default" ? (dark ? #383a3b : #cccdca)
+        : themed-border.mix(themed-text, dark ? 0.80 : 0.86);
+    out property <color> title: preset == "default" ? (dark ? #f3f3f2 : #202120) : themed-text;
+    out property <color> heading: preset == "default" ? (dark ? #e4e4e2 : #30312f)
+        : themed-text.mix(themed-page-bg, 0.94);
+    out property <color> body: preset == "default" ? (dark ? #c5c6c3 : #4b4c49)
+        : themed-text.mix(themed-page-bg, 0.88);
+    out property <color> secondary: preset == "default" ? (dark ? #a0a19e : #72736f)
+        : themed-text.mix(themed-page-bg, 0.80);
+    out property <color> muted: preset == "default" ? (dark ? #80817e : #888985)
+        : themed-text.mix(themed-page-bg, 0.72);
+    out property <color> faint: preset == "default" ? (dark ? #737471 : #949591)
+        : themed-text.mix(themed-page-bg, 0.68);
+    out property <color> disabled-bg: preset == "default" ? (dark ? #202122 : #ededeb)
+        : themed-surface.mix(themed-text, dark ? 0.92 : 0.94);
+    out property <color> input-bg: preset == "default" ? (dark ? #1c1d1e : #ffffff) : themed-surface;
+    out property <color> placeholder: preset == "default" ? (dark ? #747572 : #90918d)
+        : themed-text.mix(themed-surface, 0.68);
     out property <color> destructive: #b73731;
     out property <color> destructive-hover: #c8443d;
     out property <color> destructive-pressed: #922d28;
+}
+
+// Formatting and parsing stay in Rust because Slint intentionally has no
+// integer-to-hex string primitive. These callbacks also make every color field
+// accept the same strict #RRGGBB format.
+export global ThemeUtilities {
+    pure callback color-to-hex(color) -> string;
+    pure callback parse-color(string, color) -> color;
+    pure callback valid-color(string) -> bool;
+    color-to-hex(value) => { return "#000000"; }
+    parse-color(text, fallback) => { return fallback; }
+    valid-color(text) => { return true; }
 }

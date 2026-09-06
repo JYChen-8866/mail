@@ -15,6 +15,7 @@ mod rich_compose;
 mod settings_controller;
 mod startup;
 mod startup_metrics;
+mod theme;
 mod ui_dispatch;
 mod ui_message;
 mod window_controller;
@@ -765,6 +766,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     // Until startup completes it paints the inert mailbox shell; mapping now
     // avoids making callback wiring part of first-window latency.
     let app = AppWindow::new()?;
+    theme::register_theme_utilities(&app);
     app.set_print_supported(!cfg!(any(target_os = "android", target_os = "ios")));
     app.set_document_apis_supported(!cfg!(any(target_os = "android", target_os = "ios")));
     app.show()?;

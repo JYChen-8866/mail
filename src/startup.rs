@@ -1,13 +1,14 @@
 //! Background startup snapshot and coalesced core-event ingestion.
 
 use crate::{
-    AppWindow, PAGE_SIZE,
+    AppTheme, AppWindow, PAGE_SIZE,
     calendar::{
         LocalCalendarAccount, LocalCalendarEvent, LocalCalendarSource, calendar_accounts,
         calendar_range_millis, calendar_sources, core_calendar_event,
     },
     mail::{self, CoreMailSource},
     startup_metrics::StartupMetrics,
+    theme::stored_color,
     ui_dispatch::UiWake,
 };
 use chrono::Local;
@@ -17,6 +18,7 @@ use flectar_mail_core::{
     models::{Account, AccountConfig, CalendarConnection, Settings, ThreadCursor},
 };
 use serde::{Deserialize, Serialize};
+use slint::ComponentHandle;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -554,6 +556,26 @@ pub(crate) fn apply_settings(app: &AppWindow, settings: &Settings) {
         }
         .into(),
     );
+
+    let theme = app.global::<AppTheme>();
+    theme.set_preset(
+        match settings.theme_preset.as_str() {
+            "teal" | "green" | "purple" | "custom" => settings.theme_preset.as_str(),
+            _ => "default",
+        }
+        .into(),
+    );
+    let custom = &settings.custom_theme;
+    theme.set_custom_light_primary(stored_color(&custom.light_primary, "#0969DA"));
+    theme.set_custom_light_page_bg(stored_color(&custom.light_page_background, "#F2F2F0"));
+    theme.set_custom_light_surface(stored_color(&custom.light_surface, "#FFFFFF"));
+    theme.set_custom_light_text(stored_color(&custom.light_text, "#202120"));
+    theme.set_custom_light_border(stored_color(&custom.light_border, "#D9D9D6"));
+    theme.set_custom_dark_primary(stored_color(&custom.dark_primary, "#0969DA"));
+    theme.set_custom_dark_page_bg(stored_color(&custom.dark_page_background, "#111213"));
+    theme.set_custom_dark_surface(stored_color(&custom.dark_surface, "#18191A"));
+    theme.set_custom_dark_text(stored_color(&custom.dark_text, "#F3F3F2"));
+    theme.set_custom_dark_border(stored_color(&custom.dark_border, "#3A3B3C"));
 }
 
 #[cfg(test)]
