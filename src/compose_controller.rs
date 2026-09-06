@@ -186,12 +186,13 @@ pub(super) fn perform_selected_action(
     runtime: &tokio::runtime::Runtime,
     action: &str,
 ) -> Result<(), String> {
-    let (thread_id, core, using_core) = {
+    let (selected_id, thread_id, core, using_core) = {
         let state = state.borrow();
         let selected = state
             .selected_id
             .and_then(|id| state.messages.iter().find(|message| message.id == id));
         (
+            state.selected_id,
             selected.and_then(|message| message.thread_id),
             state.core.clone(),
             state.using_core,
@@ -203,10 +204,23 @@ pub(super) fn perform_selected_action(
     let core = core.ok_or_else(|| "mail core is unavailable".to_owned())?;
     let thread_id = thread_id.ok_or_else(|| "no message is selected".to_owned())?;
     runtime.block_on(core.perform_message_action(thread_id, action))?;
-    if matches!(action, "archive" | "spam" | "trash") {
-        state.borrow_mut().selected_id = None;
-    }
-    refresh_from_source(app, state, runtime, true)
+    // Don't clear `selected_id` here: if the message is still visible after
+    // the action (e.g. archiving a starred message while viewing "Starred"),
+    // leaving it selected keeps the reading pane and the highlighted row in
+    // sync. `refresh_from_source` below repaints the pane on its own once it
+    // sees the message actually left the reloaded page — including dropping
+    // it from a retained pagination tail (see `merge_refreshed_mail_head`)
+    // when the message was beyond the first page.
+    //
+    // Only archive/spam/trash actually move a message to a different folder,
+    // so only they can make it leave the current (folder-scoped) view. Star,
+    // unstar, mark-read, and mark-unread never do, so passing `selected_id`
+    // for those would risk wrongly dropping an unrelated message that simply
+    // sits deep in the tail and was never re-fetched by the head refresh.
+    let acted_on_id = matches!(action, "archive" | "spam" | "trash")
+        .then_some(selected_id)
+        .flatten();
+    refresh_from_source(app, state, runtime, true, acted_on_id)
 }
 
 pub(super) fn format_file_size(size: u64) -> String {
