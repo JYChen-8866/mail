@@ -23,13 +23,8 @@ pub(super) fn refresh_from_source(
         // Folder navigation is latency-sensitive. Sidebar totals are already
         // cached in InboxState and are refreshed after sync on a worker; do not
         // recount every mailbox while the Slint event loop is handling a click.
-        let page = runtime.block_on(core.load_page(
-            &scope,
-            &query,
-            None,
-            PAGE_SIZE as i64,
-            false,
-        ))?;
+        let page =
+            runtime.block_on(core.load_page(&scope, &query, None, PAGE_SIZE as i64, false))?;
         if preserve_loaded_rows {
             apply_background_mail_page(app, state, runtime, page);
             return Ok(());
@@ -72,7 +67,10 @@ fn merge_refreshed_mail_head(
         .unwrap_or_else(|| PAGE_SIZE.min(current.len()));
     let refreshed_len = refreshed.len();
     let mut merged = refreshed;
-    let mut known = merged.iter().map(|message| message.id).collect::<HashSet<_>>();
+    let mut known = merged
+        .iter()
+        .map(|message| message.id)
+        .collect::<HashSet<_>>();
     merged.extend(
         current[tail_start..]
             .iter()
@@ -274,6 +272,7 @@ pub(super) fn render_current(
         total_count,
         inbox_count,
         labels,
+        collapsed_folder_ids,
     ) = {
         let state = state.borrow();
         (
@@ -298,6 +297,7 @@ pub(super) fn render_current(
             state.total_count,
             state.inbox_count,
             state.labels.clone(),
+            state.collapsed_folder_ids.clone(),
         )
     };
 
@@ -348,17 +348,23 @@ pub(super) fn render_current(
         &mailboxes,
         &profile_avatar_images,
         &labels,
+        &collapsed_folder_ids,
     ))));
     app.set_account_mailboxes(ModelRc::new(VecModel::from(make_account_mailbox_rows(
         &mailboxes,
         &profile_avatar_images,
         &labels,
+        &collapsed_folder_ids,
     ))));
     app.set_unified_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
         &unified_mailboxes,
         &profile_avatar_images,
         &labels,
+        &HashSet::new(),
     ))));
+    app.set_selected_scope_title(
+        mailbox_scope_title(&scope, &mailboxes, &unified_mailboxes, &labels).into(),
+    );
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
     app.set_unified_count(sidebar_badge_text(inbox_count).into());
@@ -428,6 +434,18 @@ pub(super) fn apply_label_rows(
 ) {
     let rows = make_label_rows(labels, selected, "");
     app.set_selected_mail_label_count(rows.iter().filter(|label| label.applied).count() as i32);
+    app.set_sidebar_mail_categories(ModelRc::new(VecModel::from(
+        rows.iter()
+            .filter(|label| label.is_auto)
+            .cloned()
+            .collect::<Vec<_>>(),
+    )));
+    app.set_sidebar_mail_labels(ModelRc::new(VecModel::from(
+        rows.iter()
+            .filter(|label| !label.is_auto)
+            .cloned()
+            .collect::<Vec<_>>(),
+    )));
     app.set_mail_labels(ModelRc::new(VecModel::from(rows.clone())));
     app.set_mail_label_results(ModelRc::new(VecModel::from(rows)));
 }
@@ -539,6 +557,18 @@ pub(super) fn filtered_messages(
 }
 
 pub(super) fn scope_matches(email: &MailMessage, scope: &str) -> bool {
+    if matches!(scope, "Important" | "Other") || scope.starts_with("Folder:") {
+        // These scopes are filtered by the core query before projection. Their
+        // stable route/folder ids are intentionally not duplicated in every UI
+        // row.
+        return true;
+    }
+    if let Some(label_id) = scope
+        .strip_prefix("Label:")
+        .and_then(|id| id.parse::<i64>().ok())
+    {
+        return email.labels.contains(&label_id);
+    }
     if scope == "Unified Inbox" {
         return email.folder == "Inbox";
     }
@@ -653,6 +683,7 @@ pub(super) fn make_rows(
             let favicon_small = favicons.map(|icons| slint_image(&icons.small));
             EmailRow {
                 id: email.id,
+                account_id: i32::try_from(email.account_id).unwrap_or(-1),
                 account: email.account.clone().into(),
                 folder: email.folder.clone().into(),
                 sender: email.sender.clone().into(),
@@ -767,6 +798,7 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         inbox_count,
         profile_avatar_images,
         labels,
+        collapsed_folder_ids,
     ) = {
         let state = state.borrow();
         (
@@ -788,6 +820,7 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
             state.inbox_count,
             state.profile_avatar_images.clone(),
             state.labels.clone(),
+            state.collapsed_folder_ids.clone(),
         )
     };
     let visible_count = if using_core {
@@ -810,17 +843,23 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         &mailboxes,
         &profile_avatar_images,
         &labels,
+        &collapsed_folder_ids,
     ))));
     app.set_account_mailboxes(ModelRc::new(VecModel::from(make_account_mailbox_rows(
         &mailboxes,
         &profile_avatar_images,
         &labels,
+        &collapsed_folder_ids,
     ))));
     app.set_unified_mailboxes(ModelRc::new(VecModel::from(make_mailbox_rows(
         &unified_mailboxes,
         &profile_avatar_images,
         &labels,
+        &HashSet::new(),
     ))));
+    app.set_selected_scope_title(
+        mailbox_scope_title(&scope, &mailboxes, &unified_mailboxes, &labels).into(),
+    );
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
     app.set_unified_count(sidebar_badge_text(inbox_count).into());
@@ -989,9 +1028,26 @@ pub(super) fn make_mailbox_rows(
     mailboxes: &[MailboxEntry],
     avatars: &HashMap<i64, ProfileAvatarImages>,
     labels: &[flectar_mail_core::models::Label],
+    collapsed_folder_ids: &HashSet<i64>,
 ) -> Vec<MailboxRow> {
+    let parents = mailboxes
+        .iter()
+        .filter(|mailbox| mailbox.folder_id >= 0)
+        .map(|mailbox| (mailbox.folder_id, mailbox.parent_folder_id))
+        .collect::<HashMap<_, _>>();
     mailboxes
         .iter()
+        .filter(|mailbox| {
+            let mut parent = mailbox.parent_folder_id;
+            let mut visited = HashSet::new();
+            while parent >= 0 && visited.insert(parent) {
+                if collapsed_folder_ids.contains(&parent) {
+                    return false;
+                }
+                parent = parents.get(&parent).copied().unwrap_or(-1);
+            }
+            true
+        })
         .map(|mailbox| {
             let avatar = mailbox
                 .is_account
@@ -1005,6 +1061,13 @@ pub(super) fn make_mailbox_rows(
                 })
                 .flatten();
             MailboxRow {
+                account_id: i32::try_from(mailbox.account_id).unwrap_or(-1),
+                folder_id: i32::try_from(mailbox.folder_id).unwrap_or(-1),
+                parent_folder_id: i32::try_from(mailbox.parent_folder_id).unwrap_or(-1),
+                depth: i32::try_from(mailbox.depth).unwrap_or(i32::MAX),
+                has_children: mailbox.has_children,
+                expanded: !collapsed_folder_ids.contains(&mailbox.folder_id),
+                is_standard: mailbox.is_standard,
                 label: mailbox.label.clone().into(),
                 scope: mailbox.scope.clone().into(),
                 context: mailbox.context.clone().into(),
@@ -1025,12 +1088,40 @@ pub(super) fn make_mailbox_rows(
         .collect()
 }
 
+fn mailbox_scope_title(
+    scope: &str,
+    mailboxes: &[MailboxEntry],
+    unified_mailboxes: &[MailboxEntry],
+    labels: &[flectar_mail_core::models::Label],
+) -> String {
+    if scope.starts_with("Folder:") {
+        mailboxes
+            .iter()
+            .chain(unified_mailboxes)
+            .find(|mailbox| mailbox.scope == scope)
+            .map(|mailbox| mailbox.label.clone())
+            .unwrap_or_else(|| "Folder".into())
+    } else if let Some(label_id) = scope
+        .strip_prefix("Label:")
+        .and_then(|id| id.parse::<i64>().ok())
+    {
+        labels
+            .iter()
+            .find(|label| label.id == label_id)
+            .map(|label| label.name.clone())
+            .unwrap_or_else(|| "Label".into())
+    } else {
+        scope.to_owned()
+    }
+}
+
 pub(super) fn make_account_mailbox_rows(
     mailboxes: &[MailboxEntry],
     avatars: &HashMap<i64, ProfileAvatarImages>,
     labels: &[flectar_mail_core::models::Label],
+    collapsed_folder_ids: &HashSet<i64>,
 ) -> Vec<MailboxRow> {
-    make_mailbox_rows(mailboxes, avatars, labels)
+    make_mailbox_rows(mailboxes, avatars, labels, collapsed_folder_ids)
         .into_iter()
         .filter(|mailbox| mailbox.is_account)
         .collect()
@@ -1044,6 +1135,7 @@ mod tests {
         MailMessage {
             id,
             thread_id: Some(i64::from(id)),
+            account_id: 1,
             account: String::new(),
             folder: String::new(),
             sender: String::new(),
@@ -1084,7 +1176,14 @@ mod tests {
 
         assert!(retained_tail);
         assert_eq!(merged.len(), 52);
-        assert_eq!(merged.iter().map(|row| row.id).collect::<HashSet<_>>().len(), 52);
+        assert_eq!(
+            merged
+                .iter()
+                .map(|row| row.id)
+                .collect::<HashSet<_>>()
+                .len(),
+            52
+        );
         assert_eq!(merged[0].id, 101);
         assert_eq!(merged[24].id, 23);
         assert_eq!(merged[25].id, 24);
@@ -1165,34 +1264,32 @@ mod tests {
     }
 
     #[test]
-    fn mail_rows_keep_colored_labels_for_list_chips() {
+    fn mail_rows_only_keep_applied_colored_labels_for_list_chips() {
         let mut email = message(12);
         email.labels = vec![4];
         let labels = vec![
             flectar_mail_core::models::Label {
-                id: 4,
-                name: "Follow Up".into(),
-                color: "#7c3aed".into(),
-                keyword: "Follow_Up".into(),
+                id: 2,
+                name: "Personal".into(),
+                color: "#ef4444".into(),
+                keyword: "Personal".into(),
                 position: 0,
                 is_auto: false,
             },
-            // Not applied to `email` — the row's chip list must exclude this,
-            // regressing the bug where every row showed the whole catalog.
             flectar_mail_core::models::Label {
-                id: 5,
-                name: "Marketing".into(),
-                color: "#f97316".into(),
-                keyword: "Marketing".into(),
+                id: 4,
+                name: "Viaje".into(),
+                color: "#7c3aed".into(),
+                keyword: "Viaje".into(),
                 position: 1,
-                is_auto: true,
+                is_auto: false,
             },
         ];
 
         let rows = make_rows(&[email], None, &HashMap::new(), &labels);
         assert_eq!(rows[0].labels.row_count(), 1);
         let label = rows[0].labels.row_data(0).expect("projected label");
-        assert_eq!(label.name, "Follow Up");
+        assert_eq!(label.name, "Viaje");
         assert_eq!(label.color, slint::Color::from_rgb_u8(0x7c, 0x3a, 0xed));
     }
 
@@ -1200,8 +1297,13 @@ mod tests {
     fn matching_sidebar_folder_uses_the_label_color() {
         let mailboxes = vec![MailboxEntry {
             account_id: 1,
+            folder_id: 7,
+            parent_folder_id: -1,
+            depth: 0,
+            has_children: false,
+            is_standard: false,
             label: "Projects".into(),
-            scope: "Account / Projects".into(),
+            scope: "Folder:7".into(),
             context: "Account".into(),
             detail: String::new(),
             avatar: String::new(),
@@ -1217,14 +1319,57 @@ mod tests {
             is_auto: false,
         }];
 
-        let rows = make_mailbox_rows(&mailboxes, &HashMap::new(), &labels);
+        let rows = make_mailbox_rows(&mailboxes, &HashMap::new(), &labels, &HashSet::new());
         assert!(rows[0].has_custom_color);
         assert_eq!(rows[0].color, slint::Color::from_rgb_u8(0x22, 0xc5, 0x5e));
+        assert_eq!(
+            mailbox_scope_title("Folder:7", &mailboxes, &[], &labels),
+            "Projects"
+        );
+    }
+
+    #[test]
+    fn collapsed_sidebar_folder_hides_all_of_its_descendants() {
+        let folder = |folder_id, parent_folder_id, depth, has_children, label: &str| MailboxEntry {
+            account_id: 1,
+            folder_id,
+            parent_folder_id,
+            depth,
+            has_children,
+            is_standard: false,
+            label: label.into(),
+            scope: format!("Folder:{folder_id}"),
+            context: "Account".into(),
+            detail: String::new(),
+            avatar: String::new(),
+            is_account: false,
+            count: String::new(),
+        };
+        let mailboxes = vec![
+            folder(10, -1, 0, true, "Projects"),
+            folder(11, 10, 1, true, "2026"),
+            folder(12, 11, 2, false, "Launch"),
+            folder(20, -1, 0, false, "Receipts"),
+        ];
+
+        let rows = make_mailbox_rows(&mailboxes, &HashMap::new(), &[], &HashSet::from([10]));
+
+        assert_eq!(
+            rows.iter().map(|row| row.folder_id).collect::<Vec<_>>(),
+            vec![10, 20]
+        );
+        assert!(!rows[0].expanded);
     }
 
     #[test]
     fn label_color_parses_hex_and_has_a_safe_fallback() {
-        assert_eq!(label_color("#123abc"), slint::Color::from_rgb_u8(0x12, 0x3a, 0xbc));
-        assert_eq!(label_color("invalid"), slint::Color::from_rgb_u8(107, 114, 128));
+        assert_eq!(
+            label_color("#123abc"),
+            slint::Color::from_rgb_u8(0x12, 0x3a, 0xbc)
+        );
+        assert_eq!(
+            label_color("invalid"),
+            slint::Color::from_rgb_u8(107, 114, 128)
+        );
     }
 }

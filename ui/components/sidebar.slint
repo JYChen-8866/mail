@@ -1,5 +1,5 @@
 import { ScrollView, VerticalBox } from "std-widgets.slint";
-import { MailboxRow } from "../models.slint";
+import { MailboxRow, MailDragApi, MailLabelRow } from "../models.slint";
 import { Avatar } from "avatar.slint";
 import { Button } from "button.slint";
 import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading } from "workspace-layout.slint";
@@ -64,6 +64,13 @@ export component SidebarItem inherits Rectangle {
     in property <bool> prominent: false;
     in property <length> row-height: 28px;
     in property <length> left-padding: 26px;
+    in property <int> account-id: -1;
+    in property <int> folder-id: -1;
+    in property <bool> has-children: false;
+    in property <bool> expanded: true;
+    in property <bool> manageable: false;
+    in property <bool> mail-drop-enabled: false;
+    in property <bool> mail-drop-copies: false;
     in property <color> sidebar-background;
     in property <color> selection-background;
     in property <color> accent-color;
@@ -71,10 +78,19 @@ export component SidebarItem inherits Rectangle {
     in property <color> muted-color;
     in property <color> icon-color: muted-color;
     callback clicked(string);
+    callback toggled(int, bool);
+    callback new-subfolder(int, int, string);
+    callback rename-folder(int, string);
+    callback delete-folder(int, string);
 
     height: root.visible ? root.row-height : 0px;
     border-radius: 6px;
-    background: root.selected || row-hit.has-hover ? root.selection-background : root.sidebar-background;
+    background: mail-drop-target.has-drag
+        ? root.selection-background
+        : root.selected || row-hit.has-hover ? root.selection-background : root.sidebar-background;
+    border-width: mail-drop-target.has-drag ? 2px : 0px;
+    border-color: root.accent-color;
+    animate background { duration: 120ms; }
 
     SidebarIcon {
         x: root.left-padding;
@@ -82,6 +98,19 @@ export component SidebarItem inherits Rectangle {
         height: root.row-height;
         icon: root.icon;
         color: root.icon-color;
+    }
+
+    if root.has-children : Image {
+        x: root.left-padding - 17px;
+        y: (root.row-height - 11px) / 2;
+        width: 11px;
+        height: 11px;
+        source: root.expanded
+            ? @image-url("../icons/phosphor/caret-down.svg")
+            : @image-url("../icons/phosphor/caret-right.svg");
+        colorize: root.muted-color;
+        image-fit: contain;
+        accessible-role: none;
     }
 
     Text {
@@ -114,6 +143,75 @@ export component SidebarItem inherits Rectangle {
         clicked => { root.clicked(root.scope); }
         mouse-cursor: pointer;
     }
+
+
+    if root.has-children : TouchArea {
+        x: max(0px, root.left-padding - 22px);
+        y: 0px;
+        width: 22px;
+        height: root.row-height;
+        accessible-role: button;
+        accessible-label: root.expanded ? @tr("Collapse folder") : @tr("Expand folder");
+        accessible-expanded: root.expanded;
+        accessible-action-default => {
+            root.toggled(root.folder-id, !root.expanded);
+        }
+        clicked => { root.toggled(root.folder-id, !root.expanded); }
+        mouse-cursor: pointer;
+    }
+
+    if root.manageable : ContextMenuArea {
+        x: 22px;
+        width: parent.width - 22px;
+        height: parent.height;
+        Menu {
+            MenuItem {
+                title: @tr("New subfolder");
+                activated => { root.new-subfolder(root.account-id, root.folder-id, root.label); }
+            }
+            MenuItem {
+                title: @tr("Rename folder");
+                activated => { root.rename-folder(root.folder-id, root.label); }
+            }
+            MenuItem {
+                title: @tr("Delete folder");
+                activated => { root.delete-folder(root.folder-id, root.label); }
+            }
+        }
+    }
+
+    mail-drop-target := DropArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.mail-drop-enabled;
+        can-drop(event) => {
+            MailDragApi.can-drop-on-mailbox(
+                event.data,
+                root.scope,
+                root.account-id,
+                root.folder-id,
+            ) ? (root.mail-drop-copies ? DragAction.copy : DragAction.move) : DragAction.none
+        }
+        dropped(event) => {
+            if !MailDragApi.can-drop-on-mailbox(
+                event.data,
+                root.scope,
+                root.account-id,
+                root.folder-id,
+            ) {
+                return DragAction.none;
+            }
+            if MailDragApi.drop-on-mailbox(
+                event.data,
+                root.scope,
+                root.account-id,
+                root.folder-id,
+            ) {
+                return root.mail-drop-copies ? DragAction.copy : DragAction.move;
+            }
+            return DragAction.none;
+        }
+    }
 }
 
 // This is the sidebar's accordion trigger. Each instance owns its open state,
@@ -132,6 +230,7 @@ export component SidebarSectionHeader inherits Rectangle {
     in property <color> body-color;
     in property <color> muted-color;
     in property <color> icon-color;
+    in property <int> label-font-weight: 600;
     callback toggled(bool);
 
     height: root.detail == "" ? 32px : 42px;
@@ -178,7 +277,7 @@ export component SidebarSectionHeader inherits Rectangle {
         text: root.label;
         color: root.body-color;
         font-size: TypeScale.secondary;
-        font-weight: 600;
+        font-weight: root.label-font-weight;
         vertical-alignment: center;
         overflow: elide;
     }
@@ -221,6 +320,8 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
     // those sections still contributed their intrinsic height to the layout.
     in property <[MailboxRow]> account-mailboxes: [];
     in property <[MailboxRow]> unified-mailboxes: [];
+    in property <[MailLabelRow]> mail-categories: [];
+    in property <[MailLabelRow]> mail-labels: [];
     in property <string> unified-count;
     in property <string> selected-scope;
     in property <bool> monochrome-icons: false;
@@ -234,6 +335,10 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
     callback select-scope(string);
     callback compose;
     callback manage-accounts;
+    callback toggle-folder(int, bool);
+    callback request-create-folder(int, int, string);
+    callback request-rename-folder(int, string);
+    callback request-delete-folder(int, string);
 
     surface-color: root.background-color;
     clip: true;
@@ -295,6 +400,9 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         label: @tr("Inbox");
                         count: root.unified-count;
                         scope: "Unified Inbox";
+                        account-id: 0;
+                        folder-id: -1;
+                        mail-drop-enabled: true;
                         icon: @image-url("../icons/phosphor/tray-fill.svg");
                         selected: root.selected-scope == "Unified Inbox";
                         prominent: true;
@@ -312,6 +420,13 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         label: mailbox.label;
                         count: mailbox.count;
                         scope: mailbox.scope;
+                        account-id: mailbox.account_id;
+                        folder-id: mailbox.folder_id;
+                        mail-drop-enabled: mailbox.scope == "Unified Starred"
+                            || mailbox.scope == "Unified Archive"
+                            || mailbox.scope == "Unified Spam"
+                            || mailbox.scope == "Unified Trash";
+                        mail-drop-copies: mailbox.scope == "Unified Starred";
                         icon: mailbox.scope == "Unified Starred" ? @image-url("../icons/phosphor/star-fill.svg")
                             : mailbox.scope == "Unified Sent" ? @image-url("../icons/phosphor/paper-plane-tilt-fill.svg")
                             : mailbox.scope == "Unified Spam" ? @image-url("../icons/phosphor/warning-fill.svg")
@@ -332,6 +447,116 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             : mailbox.scope == "Unified Archive" ? #8b5cf6
                             : #d946ef;
                         clicked(scope) => { root.select-scope(scope); }
+                    }
+                }
+
+                categories-section := SidebarSectionHeader {
+                    label: @tr("Categories");
+                    open: false;
+                    label-font-weight: 500;
+                    sidebar-background: root.background-color;
+                    hover-background: root.hover-background;
+                    body-color: root.title-color;
+                    muted-color: root.muted-color;
+                    icon: @image-url("../icons/phosphor/envelope-simple-fill.svg");
+                    icon-color: root.monochrome-icons ? root.body-color : #2f9cf4;
+                }
+
+                if categories-section.open : VerticalBox {
+                    vertical-stretch: 0;
+                    padding: 0px;
+                    spacing: 3px;
+                    alignment: start;
+
+                    SidebarItem {
+                        label: @tr("Important");
+                        scope: "Important";
+                        mail-drop-enabled: true;
+                        icon: @image-url("../icons/phosphor/envelope-fill.svg");
+                        selected: root.selected-scope == "Important";
+                        sidebar-background: root.background-color;
+                        selection-background: root.selection-background;
+                        accent-color: root.accent-color;
+                        body-color: root.body-color;
+                        muted-color: root.muted-color;
+                        icon-color: root.monochrome-icons ? (root.selected-scope == "Important" ? root.accent-color : root.muted-color) : #2f9cf4;
+                        clicked(scope) => { root.select-scope(scope); }
+                    }
+
+                    SidebarItem {
+                        label: @tr("Other");
+                        scope: "Other";
+                        mail-drop-enabled: true;
+                        icon: @image-url("../icons/phosphor/envelope-simple-fill.svg");
+                        selected: root.selected-scope == "Other";
+                        sidebar-background: root.background-color;
+                        selection-background: root.selection-background;
+                        accent-color: root.accent-color;
+                        body-color: root.body-color;
+                        muted-color: root.muted-color;
+                        icon-color: root.monochrome-icons ? (root.selected-scope == "Other" ? root.accent-color : root.muted-color) : #64748b;
+                        clicked(scope) => { root.select-scope(scope); }
+                    }
+
+                    for category in root.mail-categories : SidebarItem {
+                        label: category.name;
+                        scope: "Label:" + category.id;
+                        mail-drop-enabled: true;
+                        icon: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                        selected: root.selected-scope == "Label:" + category.id;
+                        sidebar-background: root.background-color;
+                        selection-background: root.selection-background;
+                        accent-color: root.accent-color;
+                        body-color: root.body-color;
+                        muted-color: root.muted-color;
+                        icon-color: root.monochrome-icons
+                            ? (root.selected-scope == "Label:" + category.id ? root.accent-color : root.muted-color)
+                            : category.color;
+                        clicked(scope) => { root.select-scope(scope); }
+                    }
+                }
+
+                if root.mail-labels.length > 0 : VerticalBox {
+                    vertical-stretch: 0;
+                    padding: 0px;
+                    spacing: 3px;
+                    alignment: start;
+
+                    labels-section := SidebarSectionHeader {
+                        label: @tr("Labels");
+                        open: false;
+                        label-font-weight: 500;
+                        sidebar-background: root.background-color;
+                        hover-background: root.hover-background;
+                        body-color: root.title-color;
+                        muted-color: root.muted-color;
+                        icon: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                        icon-color: root.monochrome-icons ? root.body-color : #22a06b;
+                    }
+
+                    if labels-section.open : VerticalBox {
+                        vertical-stretch: 0;
+                        padding: 0px;
+                        spacing: 3px;
+                        alignment: start;
+
+                        for label in root.mail-labels : SidebarItem {
+                            label: label.name;
+                            scope: "Label:" + label.id;
+                            mail-drop-enabled: true;
+                            mail-drop-copies: true;
+                            icon: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                            selected: root.selected-scope == "Label:" + label.id;
+                            sidebar-background: root.background-color;
+                            selection-background: root.selection-background;
+                            accent-color: root.accent-color;
+                            body-color: root.body-color;
+                            muted-color: root.muted-color;
+                            icon-color: root.monochrome-icons
+                                ? (root.selected-scope == "Label:" + label.id ? root.accent-color : root.muted-color)
+                                : label.color;
+                            clicked(scope) => { root.select-scope(scope); }
+                        }
                     }
                 }
 
@@ -383,6 +608,17 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             label: mailbox.label;
                             count: mailbox.count;
                             scope: mailbox.scope;
+                            account-id: mailbox.account_id;
+                            folder-id: mailbox.folder_id;
+                            has-children: mailbox.has_children;
+                            expanded: mailbox.expanded;
+                            manageable: !mailbox.is_standard && mailbox.folder_id >= 0;
+                            mail-drop-enabled: (mailbox.folder_id >= 0
+                                && mailbox.label != "Sent"
+                                && mailbox.label != "Drafts")
+                                || mailbox.label == "Starred";
+                            mail-drop-copies: mailbox.label == "Starred";
+                            left-padding: 26px + mailbox.depth * 16px;
                             icon: mailbox.label == "Inbox" ? @image-url("../icons/phosphor/tray-fill.svg")
                                 : mailbox.label == "Starred" ? @image-url("../icons/phosphor/star-fill.svg")
                                 : mailbox.label == "Sent" ? @image-url("../icons/phosphor/paper-plane-tilt-fill.svg")
@@ -414,6 +650,25 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                                 : mailbox.has_custom_color ? mailbox.color
                                 : #22a06b;
                             clicked(scope) => { root.select-scope(scope); }
+                            toggled(folder-id, expanded) => { root.toggle-folder(folder-id, expanded); }
+                            new-subfolder(account-id, folder-id, name) => {
+                                root.request-create-folder(account-id, folder-id, name);
+                            }
+                            rename-folder(folder-id, name) => { root.request-rename-folder(folder-id, name); }
+                            delete-folder(folder-id, name) => { root.request-delete-folder(folder-id, name); }
+                        }
+
+                        SidebarItem {
+                            label: @tr("New folder");
+                            scope: "";
+                            icon: @image-url("../icons/phosphor/plus.svg");
+                            sidebar-background: root.background-color;
+                            selection-background: root.selection-background;
+                            accent-color: root.accent-color;
+                            body-color: root.body-color;
+                            muted-color: root.muted-color;
+                            icon-color: root.muted-color;
+                            clicked(scope) => { root.request-create-folder(account.account_id, -1, ""); }
                         }
                     }
                 }
@@ -454,4 +709,5 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
             }
         }
     }
+
 }

@@ -8,11 +8,13 @@ export { AppTheme, ThemeUtilities } from "design-system.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
 import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactAccountRow, ContactRow, EmailLink, EmailRow, EmailTile, LocalizedMessage, MailboxRow, MailLabelRow } from "models.slint";
+export { MailDragApi } from "models.slint";
 import { FunctionalCalendarView } from "components/calendar.slint";
 import { CompactProductNav, ProductRail } from "components/product-rail.slint";
 import { WorkspaceFrame } from "components/workspace-layout.slint";
 import { CalendarEventDialog } from "dialogs/calendar-event-dialog.slint";
 import { ComposeDialog } from "dialogs/compose-dialog.slint";
+import { FolderDialog } from "dialogs/folder-dialog.slint";
 import { SettingsDialog } from "dialogs/settings-dialog.slint";
 import { MailView } from "views/mail-view.slint";
 import { ContactsView } from "views/contacts-view.slint";
@@ -325,6 +327,12 @@ export global I18n {
         if (key == "Label updated.") { return @tr("Label updated."); }
         if (key == "Could not update label: {}") { return @tr("Could not update label: {}", argument); }
         if (key == "Could not save label: {}") { return @tr("Could not save label: {}", argument); }
+        if (key == "Folder created.") { return @tr("Folder created."); }
+        if (key == "Folder renamed.") { return @tr("Folder renamed."); }
+        if (key == "Folder deleted.") { return @tr("Folder deleted."); }
+        if (key == "Could not create folder: {}") { return @tr("Could not create folder: {}", argument); }
+        if (key == "Could not rename folder: {}") { return @tr("Could not rename folder: {}", argument); }
+        if (key == "Could not delete folder: {}") { return @tr("Could not delete folder: {}", argument); }
         if (key == "Could not close preview: {}") { return @tr("Could not close preview: {}", argument); }
         if (key == "Opened the system print view.") { return @tr("Opened the system print view."); }
         if (key == "Could not print message: {}") { return @tr("Could not print message: {}", argument); }
@@ -394,6 +402,10 @@ export component AppWindow inherits Window {
     callback search_changed(string);
     callback set_search_filter(string);
     callback select_scope(string);
+    callback toggle_folder(int, bool);
+    callback create_folder(int, int, string);
+    callback rename_folder(int, string);
+    callback delete_folder(int);
     callback load_more();
     callback toggle_settings();
     callback sync_mail();
@@ -482,6 +494,7 @@ export component AppWindow inherits Window {
     callback drain-core-updates();
     callback drain-mail-list-updates();
     callback drain-mail-metadata-updates();
+    callback drain-folder-updates();
     callback drain-message-load-updates();
     callback drain-favicon-updates();
     callback drain-profile-avatar-updates();
@@ -496,6 +509,8 @@ export component AppWindow inherits Window {
     in property <[MailboxRow]> account_mailboxes: [];
     in property <[MailboxRow]> unified_mailboxes: [];
     in property <[MailLabelRow]> mail_labels: [];
+    in property <[MailLabelRow]> sidebar_mail_categories: [];
+    in property <[MailLabelRow]> sidebar_mail_labels: [];
     in property <[MailLabelRow]> mail_label_results: [];
     in property <int> selected_mail_label_count: 0;
     in property <[AccountRow]> connected_accounts: [];
@@ -558,6 +573,7 @@ export component AppWindow inherits Window {
     in-out property <string> calendar_event_duration: "60";
     in-out property <int> calendar_event_color: 0;
     in property <string> selected_scope: "Unified Inbox";
+    in property <string> selected_scope_title: "Unified Inbox";
     in-out property <bool> mail_sidebar_collapsed: false;
     in-out property <bool> contacts_sidebar_collapsed: false;
     in property <string> unified_count: "";
@@ -722,8 +738,44 @@ export component AppWindow inherits Window {
         && !(root.active_view == "mail" && mail-view.compact-page == "message")
         && !(root.active_view == "contacts" && contacts-view.detail-page-visible);
     private property <length> compact-primary-nav-height: LayoutMetrics.compact-navigation-height;
+    private property <bool> folder-dialog-open: false;
+    private property <string> folder-dialog-mode: "create";
+    private property <int> folder-dialog-account-id: -1;
+    private property <int> folder-dialog-folder-id: -1;
+    private property <int> folder-dialog-parent-id: -1;
+    private property <string> folder-dialog-parent-name: "";
+    private property <string> folder-dialog-name: "";
+
+    function open-folder-create(account-id: int, parent-id: int, parent-name: string) {
+        root.folder-dialog-mode = "create";
+        root.folder-dialog-account-id = account-id;
+        root.folder-dialog-parent-id = parent-id;
+        root.folder-dialog-parent-name = parent-name;
+        root.folder-dialog-name = "";
+        root.folder-dialog-open = true;
+    }
+
+    function open-folder-rename(folder-id: int, name: string) {
+        root.folder-dialog-mode = "rename";
+        root.folder-dialog-folder-id = folder-id;
+        root.folder-dialog-parent-name = "";
+        root.folder-dialog-name = name;
+        root.folder-dialog-open = true;
+    }
+
+    function open-folder-delete(folder-id: int, name: string) {
+        root.folder-dialog-mode = "delete";
+        root.folder-dialog-folder-id = folder-id;
+        root.folder-dialog-parent-name = "";
+        root.folder-dialog-name = name;
+        root.folder-dialog-open = true;
+    }
 
     system-back-requested => {
+        if (root.folder-dialog-open) {
+            root.folder-dialog-open = false;
+            return true;
+        }
         if (!root.compact-layout) {
             return false;
         }
@@ -815,12 +867,15 @@ export component AppWindow inherits Window {
             account_mailboxes: root.account_mailboxes;
             unified_mailboxes: root.unified_mailboxes;
             mail_labels: root.mail_labels;
+            sidebar_mail_categories: root.sidebar_mail_categories;
+            sidebar_mail_labels: root.sidebar_mail_labels;
             mail_label_results: root.mail_label_results;
             selected_mail_label_count: root.selected_mail_label_count;
             email_tiles: root.email_tiles;
             email_links: root.email_links;
             active_view: root.active_view;
             selected_scope: root.selected_scope;
+            selected_scope_title: root.selected_scope_title;
             unified_count: root.unified_count;
             total_count: root.total_count;
             search_query: root.search_query;
@@ -885,6 +940,10 @@ export component AppWindow inherits Window {
             search_changed(query) => { root.search_changed(query); }
             set_search_filter(filter) => { root.set_search_filter(filter); }
             select_scope(scope) => { root.select_scope(scope); }
+            toggle_folder(id, expanded) => { root.toggle_folder(id, expanded); }
+            request_folder_create(account-id, parent-id, parent-name) => { root.open-folder-create(account-id, parent-id, parent-name); }
+            request_folder_rename(id, name) => { root.open-folder-rename(id, name); }
+            request_folder_delete(id, name) => { root.open-folder-delete(id, name); }
             load_more => { root.load_more(); }
             sync_mail => { root.sync_mail(); }
             message_action(action) => { root.message_action(action); }
@@ -1315,6 +1374,37 @@ export component AppWindow inherits Window {
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
+        }
+    }
+
+    if root.folder-dialog-open : FolderDialog {
+        x: root.safe-area-insets.left;
+        y: root.safe-area-insets.top;
+        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
+        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        z: 15000;
+        mode: root.folder-dialog-mode;
+        name <=> root.folder-dialog-name;
+        parent-name: root.folder-dialog-parent-name;
+        surface-color: root.surface;
+        raised-color: root.control-bg;
+        ui-border-color: root.border;
+        accent-color: root.accent;
+        title-color: root.title-color;
+        body-color: root.body-text;
+        muted-color: root.muted-text;
+        cancel => { root.folder-dialog-open = false; }
+        submit(name) => {
+            root.folder-dialog-open = false;
+            if (root.folder-dialog-mode == "create") {
+                root.create-folder(root.folder-dialog-account-id, root.folder-dialog-parent-id, name);
+            } else {
+                root.rename-folder(root.folder-dialog-folder-id, name);
+            }
+        }
+        confirm-delete => {
+            root.folder-dialog-open = false;
+            root.delete-folder(root.folder-dialog-folder-id);
         }
     }
 

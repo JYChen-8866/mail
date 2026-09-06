@@ -1,5 +1,5 @@
 import { HorizontalBox, ListView, VerticalBox } from "std-widgets.slint";
-import { EmailRow } from "../models.slint";
+import { EmailRow, MailDragApi } from "../models.slint";
 import { Avatar } from "../components/avatar.slint";
 import { FloatingActionButton, IconButton, LineEdit } from "../components/controls.slint";
 import { TypeScale } from "../typography.slint";
@@ -55,6 +55,7 @@ export component MailListPane inherits Rectangle {
     in property <bool> loading: false;
     in property <[EmailRow]> emails: [];
     in property <string> selected_scope: "Unified Inbox";
+    in property <string> scope_title: selected_scope;
     in property <string> total_count: "";
     in property <string> search_query: "";
     in property <string> search_filter: "All mail";
@@ -211,7 +212,7 @@ export component MailListPane inherits Rectangle {
                                 // Match the 40px toolbar controls below.
                                 height: root.compact ? LayoutMetrics.touch-target : 40px;
                                 item-spacing: 6px;
-                                title: root.selected_scope;
+                                title: root.scope_title;
                                 title-font-size: root.compact ? TypeScale.title-small : TypeScale.heading-small;
                                 title-weight: 600;
                                 show-leading: true;
@@ -336,7 +337,7 @@ export component MailListPane inherits Rectangle {
                             height: parent.height;
                             horizontal-scrollbar-policy: always-off;
                             mouse-drag-pan-enabled: root.compact;
-                            accessible-label: root.selected_scope;
+                            accessible-label: root.scope_title;
                             accessible-item-count: root.emails.length;
                             scrolled => { root.user-scrolled(); }
 
@@ -345,7 +346,9 @@ export component MailListPane inherits Rectangle {
                                 height: root.dense ? 44px : 96px;
                                 border-radius: 6px;
                                 clip: true;
+                                opacity: row-drag.dragging ? 0.55 : 1;
                                 background: row.selected ? root.selected-row : root.surface;
+                                animate opacity { duration: 120ms; }
                                 accessible-role: list-item;
                                 accessible-label: @tr("{}, {}", row.sender, row.subject == "" ? @tr("(No subject)") : row.subject)
                                     + (row.label_summary == "" ? "" : ", " + row.label_summary);
@@ -478,31 +481,40 @@ export component MailListPane inherits Rectangle {
                                 // replace the row model between those two events;
                                 // in that case the old TouchArea never receives
                                 // the release and the click appears to be lost.
-                                row-context := ContextMenuArea {
+                                row-drag := DragArea {
                                     width: parent.width;
                                     height: parent.height;
+                                    enabled: !root.compact;
+                                    data: MailDragApi.make-transfer(row.id, row.account_id);
+                                    allow-copy: true;
+                                    allow-move: true;
 
-                                    row-hit := TouchArea {
+                                    row-context := ContextMenuArea {
                                         width: parent.width;
                                         height: parent.height;
-                                        mouse-cursor: pointer;
-                                        pointer-event(event) => {
-                                            if (event.kind == PointerEventKind.down) {
-                                                if (event.button == PointerEventButton.left) {
-                                                    root.select_email(row.id);
-                                                } else if (event.button == PointerEventButton.right) {
-                                                    row-context.show({ x: row-hit.mouse-x, y: row-hit.mouse-y });
+
+                                        row-hit := TouchArea {
+                                            width: parent.width;
+                                            height: parent.height;
+                                            mouse-cursor: pointer;
+                                            pointer-event(event) => {
+                                                if (event.kind == PointerEventKind.down) {
+                                                    if (event.button == PointerEventButton.left) {
+                                                        root.select_email(row.id);
+                                                    } else if (event.button == PointerEventButton.right) {
+                                                        row-context.show({ x: row-hit.mouse-x, y: row-hit.mouse-y });
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
 
-                                    Menu {
-                                        MenuItem { title: row.starred ? @tr("Remove star") : @tr("Star message"); activated => { root.message_action_for_email(row.id, row.starred ? "unstar" : "star"); } }
-                                        MenuItem { title: row.unread ? @tr("Mark as read") : @tr("Mark as unread"); activated => { root.message_action_for_email(row.id, row.unread ? "mark_read" : "mark_unread"); } }
-                                        MenuItem { title: @tr("Archive"); activated => { root.message_action_for_email(row.id, "archive"); } }
-                                        MenuItem { title: @tr("Move to spam"); activated => { root.message_action_for_email(row.id, "spam"); } }
-                                        MenuItem { title: @tr("Move to trash"); activated => { root.message_action_for_email(row.id, "trash"); } }
+                                        Menu {
+                                            MenuItem { title: row.starred ? @tr("Remove star") : @tr("Star message"); activated => { root.message_action_for_email(row.id, row.starred ? "unstar" : "star"); } }
+                                            MenuItem { title: row.unread ? @tr("Mark as read") : @tr("Mark as unread"); activated => { root.message_action_for_email(row.id, row.unread ? "mark_read" : "mark_unread"); } }
+                                            MenuItem { title: @tr("Archive"); activated => { root.message_action_for_email(row.id, "archive"); } }
+                                            MenuItem { title: @tr("Move to spam"); activated => { root.message_action_for_email(row.id, "spam"); } }
+                                            MenuItem { title: @tr("Move to trash"); activated => { root.message_action_for_email(row.id, "trash"); } }
+                                        }
                                     }
                                 }
                             }

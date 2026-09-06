@@ -7,6 +7,7 @@
 
 use crate::error::{CoreError, Result};
 use crate::mime::{self, MimePlan};
+use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use futures::StreamExt;
 use std::future::Future;
 use std::sync::Arc;
@@ -247,6 +248,93 @@ pub struct RemoteFolder {
     pub delimiter: Option<String>,
     /// Lowercased attributes, e.g. "\\sent", "\\noselect".
     pub attributes: Vec<String>,
+}
+
+/// Decode the modified UTF-7 form used by traditional IMAP mailbox names.
+/// Servers that advertise UTF8=ACCEPT may already return UTF-8; text without
+/// modified UTF-7 runs passes through unchanged.
+pub fn decode_mailbox_name(name: &str) -> String {
+    let mut decoded = String::with_capacity(name.len());
+    let mut rest = name;
+    while let Some(start) = rest.find('&') {
+        decoded.push_str(&rest[..start]);
+        rest = &rest[start + 1..];
+        let Some(end) = rest.find('-') else {
+            decoded.push('&');
+            decoded.push_str(rest);
+            return decoded;
+        };
+        let encoded = &rest[..end];
+        rest = &rest[end + 1..];
+        if encoded.is_empty() {
+            decoded.push('&');
+            continue;
+        }
+        let standard = encoded.replace(',', "/");
+        let Ok(bytes) = STANDARD_NO_PAD.decode(standard) else {
+            decoded.push('&');
+            decoded.push_str(encoded);
+            decoded.push('-');
+            continue;
+        };
+        if !bytes.len().is_multiple_of(2) {
+            decoded.push('&');
+            decoded.push_str(encoded);
+            decoded.push('-');
+            continue;
+        }
+        let units = bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| u16::from_be_bytes(*pair));
+        let text = char::decode_utf16(units).collect::<std::result::Result<String, _>>();
+        match text {
+            Ok(text) => decoded.push_str(&text),
+            Err(_) => {
+                decoded.push('&');
+                decoded.push_str(encoded);
+                decoded.push('-');
+            }
+        }
+    }
+    decoded.push_str(rest);
+    decoded
+}
+
+/// Encode a user-entered mailbox name for an IMAP server that uses modified
+/// UTF-7. Printable ASCII is kept verbatim, except `&`, which is represented
+/// by the special `&-` sequence.
+pub fn encode_mailbox_name(name: &str) -> String {
+    let mut encoded = String::with_capacity(name.len());
+    let mut unicode_run = String::new();
+    let flush = |run: &mut String, output: &mut String| {
+        if run.is_empty() {
+            return;
+        }
+        let bytes = run
+            .encode_utf16()
+            .flat_map(u16::to_be_bytes)
+            .collect::<Vec<_>>();
+        output.push('&');
+        output.push_str(&STANDARD_NO_PAD.encode(bytes).replace('/', ","));
+        output.push('-');
+        run.clear();
+    };
+    for character in name.chars() {
+        if (' '..='~').contains(&character) {
+            flush(&mut unicode_run, &mut encoded);
+            if character == '&' {
+                encoded.push_str("&-");
+            } else {
+                encoded.push(character);
+            }
+        } else {
+            unicode_run.push(character);
+        }
+    }
+    flush(&mut unicode_run, &mut encoded);
+    encoded
 }
 
 pub async fn list_folders(session: &mut Session) -> Result<Vec<RemoteFolder>> {
@@ -815,6 +903,26 @@ pub async fn create_folder(session: &mut Session, name: &str) -> Result<()> {
     .await
 }
 
+pub async fn rename_folder(session: &mut Session, from: &str, to: &str) -> Result<()> {
+    with_deadline("RENAME", METADATA_TIMEOUT, async {
+        session
+            .rename(from, to)
+            .await
+            .map_err(|error| CoreError::Imap(error.to_string()))
+    })
+    .await
+}
+
+pub async fn delete_folder(session: &mut Session, name: &str) -> Result<()> {
+    with_deadline("DELETE", METADATA_TIMEOUT, async {
+        session
+            .delete(name)
+            .await
+            .map_err(|error| CoreError::Imap(error.to_string()))
+    })
+    .await
+}
+
 async fn create_folder_inner(session: &mut Session, name: &str) -> Result<()> {
     session
         .create(name)
@@ -980,6 +1088,25 @@ mod tests {
         assert_eq!(super::uid_set(&[]), "");
         assert_eq!(super::uid_set(&[42]), "42");
         assert_eq!(super::uid_set(&[u32::MAX]), u32::MAX.to_string());
+    }
+
+    #[test]
+    fn modified_utf7_round_trips_unicode_and_ampersands() {
+        for name in ["Inbox", "A & B", "📁 Projects", "🚗🚙", "旅行/東京", "😀"] {
+            assert_eq!(
+                super::decode_mailbox_name(&super::encode_mailbox_name(name)),
+                name
+            );
+        }
+        assert_eq!(super::decode_mailbox_name("Envoy&AOk-"), "Envoyé");
+        assert_eq!(super::decode_mailbox_name("&Jjo-"), "☺");
+    }
+
+    #[test]
+    fn malformed_modified_utf7_is_preserved() {
+        for name in ["broken&", "broken&ab-", "broken&!!!!-"] {
+            assert_eq!(super::decode_mailbox_name(name), name);
+        }
     }
 
     #[test]

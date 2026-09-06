@@ -7,7 +7,23 @@ export struct LocalizedMessage {
     third_argument: string,
 }
 
+// Drag payloads are opaque to Slint and stay application-internal. Keeping
+// the transfer construction, validation, and mutation on one shared global
+// lets the list and every responsive sidebar use the same DnD contract.
+export global MailDragApi {
+    pure callback make-transfer(int, int) -> data-transfer;
+    pure callback can-drop-on-mailbox(data-transfer, string, int, int) -> bool;
+    callback drop-on-mailbox(data-transfer, string, int, int) -> bool;
+}
+
 export struct MailboxRow {
+    account_id: int,
+    folder_id: int,
+    parent_folder_id: int,
+    depth: int,
+    has_children: bool,
+    expanded: bool,
+    is_standard: bool,
     label: string,
     scope: string,
     context: string,
@@ -34,6 +50,7 @@ export struct MailLabelRow {
 
 export struct EmailRow {
     id: int,
+    account_id: int,
     account: string,
     folder: string,
     sender: string,

@@ -82,11 +82,93 @@ pub fn list_info(conn: &Connection, account_id: Option<i64>) -> Result<Vec<Folde
         .map(|f| FolderInfo {
             id: f.id,
             account_id: f.account_id,
+            display_name: if f.jmap_id.is_some() {
+                f.imap_name.clone()
+            } else {
+                crate::imap::decode_mailbox_name(&f.imap_name)
+            },
+            is_jmap: f.jmap_id.is_some(),
             imap_name: f.imap_name,
             delimiter: f.delimiter,
             role: f.role,
         })
         .collect())
+}
+
+pub fn rename_tree(
+    conn: &Connection,
+    account_id: i64,
+    old_prefix: &str,
+    new_prefix: &str,
+    delimiter: &str,
+) -> Result<()> {
+    let descendant_prefix = format!("{old_prefix}{delimiter}");
+    let mut stmt = conn.prepare(
+        "SELECT id, imap_name FROM folders
+         WHERE account_id = ?1 AND (imap_name = ?2 OR imap_name LIKE ?3 ESCAPE '\\')
+         ORDER BY LENGTH(imap_name)",
+    )?;
+    let escaped = descendant_prefix
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let rows = stmt
+        .query_map(
+            params![account_id, old_prefix, format!("{escaped}%")],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    for (id, old_name) in rows {
+        let suffix = old_name.strip_prefix(old_prefix).unwrap_or_default();
+        conn.execute(
+            "UPDATE folders SET imap_name = ?2 WHERE id = ?1",
+            params![id, format!("{new_prefix}{suffix}")],
+        )?;
+    }
+    Ok(())
+}
+
+pub fn delete_tree(
+    conn: &Connection,
+    account_id: i64,
+    prefix: &str,
+    delimiter: &str,
+) -> Result<()> {
+    let descendant_prefix = format!("{prefix}{delimiter}");
+    let escaped = descendant_prefix
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    let pattern = format!("{escaped}%");
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT m.thread_id
+         FROM messages m JOIN folders f ON f.id = m.folder_id
+         WHERE f.account_id = ?1 AND (f.imap_name = ?2 OR f.imap_name LIKE ?3 ESCAPE '\\')
+           AND m.thread_id IS NOT NULL",
+    )?;
+    let thread_ids = stmt
+        .query_map(params![account_id, prefix, pattern], |row| {
+            row.get::<_, i64>(0)
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    conn.execute(
+        "DELETE FROM messages WHERE folder_id IN (
+           SELECT id FROM folders
+           WHERE account_id = ?1 AND (imap_name = ?2 OR imap_name LIKE ?3 ESCAPE '\\')
+         )",
+        params![account_id, prefix, pattern],
+    )?;
+    conn.execute(
+        "DELETE FROM folders
+         WHERE account_id = ?1 AND (imap_name = ?2 OR imap_name LIKE ?3 ESCAPE '\\')",
+        params![account_id, prefix, pattern],
+    )?;
+    for thread_id in thread_ids {
+        super::threads::recompute(conn, thread_id)?;
+    }
+    Ok(())
 }
 
 pub fn get(conn: &Connection, id: i64) -> Result<Option<Folder>> {
@@ -340,5 +422,45 @@ mod tests {
             get(&conn, first).unwrap().unwrap().imap_name,
             get(&conn, second).unwrap().unwrap().imap_name
         );
+    }
+
+    #[test]
+    fn folder_info_decodes_imap_names_but_keeps_jmap_unicode_verbatim() {
+        let conn = testutil::conn();
+        testutil::seed_account(&conn);
+        let imap = upsert(&conn, 1, "&Jjo- Projects", Some("/"), None).unwrap();
+        let jmap = upsert_jmap(&conn, 1, "remote", "A&-B", None).unwrap();
+
+        let all = list_info(&conn, Some(1)).unwrap();
+        assert_eq!(
+            all.iter()
+                .find(|folder| folder.id == imap)
+                .unwrap()
+                .display_name,
+            "☺ Projects"
+        );
+        conn.execute("UPDATE accounts SET mail_protocol='jmap' WHERE id=1", [])
+            .unwrap();
+        let all = list_info(&conn, Some(1)).unwrap();
+        assert_eq!(
+            all.iter()
+                .find(|folder| folder.id == jmap)
+                .unwrap()
+                .display_name,
+            "A&-B"
+        );
+    }
+
+    #[test]
+    fn renaming_a_folder_updates_its_descendant_paths() {
+        let conn = testutil::conn();
+        testutil::seed_account(&conn);
+        let parent = upsert(&conn, 1, "Projects", Some("/"), None).unwrap();
+        let child = upsert(&conn, 1, "Projects/2026", Some("/"), None).unwrap();
+
+        rename_tree(&conn, 1, "Projects", "Work", "/").unwrap();
+
+        assert_eq!(get(&conn, parent).unwrap().unwrap().imap_name, "Work");
+        assert_eq!(get(&conn, child).unwrap().unwrap().imap_name, "Work/2026");
     }
 }

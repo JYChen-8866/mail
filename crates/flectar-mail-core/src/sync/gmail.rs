@@ -1152,6 +1152,49 @@ async fn sync_labels(ctx: &SyncCtx, config: &AccountConfig, api: &GmailApi) -> R
         .await
 }
 
+pub(crate) async fn create_user_folder(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    name: &str,
+) -> Result<()> {
+    let api = GmailApi::new(ctx.clone(), config.clone())?;
+    api.create_label(name, None).await?;
+    sync_labels(ctx, config, &api).await
+}
+
+pub(crate) async fn rename_user_folder(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    folder_id: i64,
+    name: &str,
+) -> Result<()> {
+    let account_id = config.id;
+    let provider_id = ctx
+        .db
+        .read(move |conn| repo::gmail::provider_label_for_folder(conn, account_id, folder_id))
+        .await?
+        .ok_or_else(|| CoreError::NotFound(format!("Gmail folder {folder_id}")))?;
+    let api = GmailApi::new(ctx.clone(), config.clone())?;
+    api.update_label(&provider_id, name, None).await?;
+    sync_labels(ctx, config, &api).await
+}
+
+pub(crate) async fn delete_user_folder(
+    ctx: &SyncCtx,
+    config: &AccountConfig,
+    folder_id: i64,
+) -> Result<()> {
+    let account_id = config.id;
+    let provider_id = ctx
+        .db
+        .read(move |conn| repo::gmail::provider_label_for_folder(conn, account_id, folder_id))
+        .await?
+        .ok_or_else(|| CoreError::NotFound(format!("Gmail folder {folder_id}")))?;
+    let api = GmailApi::new(ctx.clone(), config.clone())?;
+    api.delete_label(&provider_id).await?;
+    sync_labels(ctx, config, &api).await
+}
+
 #[derive(Debug, Clone)]
 struct ParsedResource {
     provider_id: String,

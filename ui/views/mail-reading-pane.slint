@@ -166,6 +166,17 @@ export component MailReadingPane inherits Rectangle {
     private property <bool> label-editor-is-auto: false;
     private property <string> new-label-name: "";
     private property <color> new-label-color: #4a86e8;
+    // The desktop reading pane is flexible and can become much narrower than
+    // the window. Collapse the footer before its localized labels compete for
+    // space, and always use touch-sized icon actions in the compact layout.
+    private property <bool> icon-only-footer-actions: root.compact;
+
+    changed width => {
+        root.icon-only-footer-actions = root.compact || root.width < 760px;
+    }
+    changed compact => {
+        root.icon-only-footer-actions = root.compact || root.width < 760px;
+    }
 
     changed clipboard-request-id => {
         if root.clipboard-request-id > 0 {
@@ -903,8 +914,7 @@ export component MailReadingPane inherits Rectangle {
                             spacing: root.compact ? 6px : 8px;
                             alignment: start;
                             cross-axis-alignment: center;
-                            Button {
-                                visible: !root.selected_is_draft;
+                            if !root.selected_is_draft && !root.icon-only-footer-actions : Button {
                                 height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Reply");
                                 has-icon: true;
@@ -912,8 +922,7 @@ export component MailReadingPane inherits Rectangle {
                                 enabled: root.has_selected;
                                 clicked => { root.compose_message_action("reply"); }
                             }
-                            Button {
-                                visible: !root.selected_is_draft;
+                            if !root.selected_is_draft && !root.icon-only-footer-actions : Button {
                                 height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Reply all");
                                 has-icon: true;
@@ -921,8 +930,7 @@ export component MailReadingPane inherits Rectangle {
                                 enabled: root.has_selected;
                                 clicked => { root.compose_message_action("reply_all"); }
                             }
-                            Button {
-                                visible: !root.selected_is_draft;
+                            if !root.selected_is_draft && !root.icon-only-footer-actions : Button {
                                 height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Forward");
                                 has-icon: true;
@@ -930,8 +938,58 @@ export component MailReadingPane inherits Rectangle {
                                 enabled: root.has_selected;
                                 clicked => { root.compose_message_action("forward"); }
                             }
-                            Button {
-                                visible: root.selected_is_draft;
+                            if !root.selected_is_draft && root.icon-only-footer-actions : IconButton {
+                                width: root.compact ? LayoutMetrics.touch-target : 32px;
+                                height: root.compact ? LayoutMetrics.touch-target : 32px;
+                                border-width: 1px;
+                                border-color: root.border;
+                                icon-size: root.compact ? LayoutMetrics.compact-toolbar-icon-size : 16px;
+                                icon: @image-url("../icons/phosphor/arrow-bend-up-left.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.surface;
+                                hover-background: root.control-bg;
+                                active-background: root.muted-control-bg;
+                                interactive: root.has_selected;
+                                tooltip-text: @tr("Reply");
+                                tooltip-above: true;
+                                accessible-id: "message-reply-button";
+                                clicked => { root.compose_message_action("reply"); }
+                            }
+                            if !root.selected_is_draft && root.icon-only-footer-actions : IconButton {
+                                width: root.compact ? LayoutMetrics.touch-target : 32px;
+                                height: root.compact ? LayoutMetrics.touch-target : 32px;
+                                border-width: 1px;
+                                border-color: root.border;
+                                icon-size: root.compact ? LayoutMetrics.compact-toolbar-icon-size : 16px;
+                                icon: @image-url("../icons/phosphor/arrow-bend-double-up-left.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.surface;
+                                hover-background: root.control-bg;
+                                active-background: root.muted-control-bg;
+                                interactive: root.has_selected;
+                                tooltip-text: @tr("Reply all");
+                                tooltip-above: true;
+                                accessible-id: "message-reply-all-button";
+                                clicked => { root.compose_message_action("reply_all"); }
+                            }
+                            if !root.selected_is_draft && root.icon-only-footer-actions : IconButton {
+                                width: root.compact ? LayoutMetrics.touch-target : 32px;
+                                height: root.compact ? LayoutMetrics.touch-target : 32px;
+                                border-width: 1px;
+                                border-color: root.border;
+                                icon-size: root.compact ? LayoutMetrics.compact-toolbar-icon-size : 16px;
+                                icon: @image-url("../icons/phosphor/arrow-bend-up-right.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.surface;
+                                hover-background: root.control-bg;
+                                active-background: root.muted-control-bg;
+                                interactive: root.has_selected;
+                                tooltip-text: @tr("Forward");
+                                tooltip-above: true;
+                                accessible-id: "message-forward-button";
+                                clicked => { root.compose_message_action("forward"); }
+                            }
+                            if root.selected_is_draft : Button {
                                 height: root.compact ? LayoutMetrics.touch-target : 32px;
                                 text: @tr("Continue editing");
                                 has-icon: true;
@@ -941,12 +999,27 @@ export component MailReadingPane inherits Rectangle {
                                 clicked => { root.compose_message_action("edit_draft"); }
                             }
                             Rectangle { horizontal-stretch: 1; }
-                            if !root.compact && !root.selected_is_draft : Button {
+                            if !root.compact && !root.selected_is_draft && !root.icon-only-footer-actions : Button {
                                 height: 32px;
                                 text: @tr("Open in browser");
                                 has-icon: true;
                                 icon: @image-url("../icons/phosphor/browser.svg");
                                 enabled: root.has_selected;
+                                clicked => { root.open_message_in_browser(); }
+                            }
+                            if !root.compact && !root.selected_is_draft && root.icon-only-footer-actions : IconButton {
+                                border-width: 1px;
+                                border-color: root.border;
+                                icon-size: 16px;
+                                icon: @image-url("../icons/phosphor/browser.svg");
+                                icon-color: root.secondary-text;
+                                idle-background: root.surface;
+                                hover-background: root.control-bg;
+                                active-background: root.muted-control-bg;
+                                interactive: root.has_selected;
+                                tooltip-text: @tr("Open in browser");
+                                tooltip-above: true;
+                                accessible-id: "message-open-in-browser-button";
                                 clicked => { root.open_message_in_browser(); }
                             }
                             if !root.compact && !root.selected_is_draft : IconButton {
