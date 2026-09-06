@@ -98,6 +98,8 @@ export component MailView inherits Rectangle {
     callback request_folder_create(int, int, string);
     callback request_folder_rename(int, string);
     callback request_folder_delete(int, string);
+    callback request_label_rename(int, string, color);
+    callback request_label_delete(int, string);
     callback load_more();
     callback sync_mail();
     callback message_action(string);
@@ -161,6 +163,8 @@ export component MailView inherits Rectangle {
                 request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
                 request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
                 request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
+                request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
+                request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => { root.open_compose(); }
                 manage-accounts => {
                     root.settings_tab = "Accounts";
@@ -338,6 +342,8 @@ export component MailView inherits Rectangle {
                 request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
                 request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
                 request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
+                request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
+                request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => { root.open_compose(); }
                 manage-accounts => {
                     root.settings_tab = "Accounts";
@@ -540,6 +546,8 @@ export component MailView inherits Rectangle {
                 request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
                 request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
                 request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
+                request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
+                request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => {
                     root.folders-open = false;
                     root.open_compose();

@@ -66,9 +66,11 @@ export component SidebarItem inherits Rectangle {
     in property <length> left-padding: 26px;
     in property <int> account-id: -1;
     in property <int> folder-id: -1;
+    in property <int> label-id: -1;
     in property <bool> has-children: false;
     in property <bool> expanded: true;
     in property <bool> manageable: false;
+    in property <bool> label-manageable: false;
     in property <bool> mail-drop-enabled: false;
     in property <bool> mail-drop-copies: false;
     in property <color> sidebar-background;
@@ -77,11 +79,14 @@ export component SidebarItem inherits Rectangle {
     in property <color> body-color;
     in property <color> muted-color;
     in property <color> icon-color: muted-color;
+    in property <color> editable-color: icon-color;
     callback clicked(string);
     callback toggled(int, bool);
     callback new-subfolder(int, int, string);
     callback rename-folder(int, string);
     callback delete-folder(int, string);
+    callback rename-label(int, string, color);
+    callback delete-label(int, string);
 
     height: root.visible ? root.row-height : 0px;
     border-radius: 6px;
@@ -176,6 +181,22 @@ export component SidebarItem inherits Rectangle {
             MenuItem {
                 title: @tr("Delete folder");
                 activated => { root.delete-folder(root.folder-id, root.label); }
+            }
+        }
+    }
+
+    if root.label-manageable : ContextMenuArea {
+        x: 22px;
+        width: parent.width - 22px;
+        height: parent.height;
+        Menu {
+            MenuItem {
+                title: @tr("Rename label");
+                activated => { root.rename-label(root.label-id, root.label, root.editable-color); }
+            }
+            MenuItem {
+                title: @tr("Delete label");
+                activated => { root.delete-label(root.label-id, root.label); }
             }
         }
     }
@@ -339,6 +360,8 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
     callback request-create-folder(int, int, string);
     callback request-rename-folder(int, string);
     callback request-delete-folder(int, string);
+    callback request-rename-label(int, string, color);
+    callback request-delete-label(int, string);
 
     surface-color: root.background-color;
     clip: true;
@@ -458,7 +481,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                     hover-background: root.hover-background;
                     body-color: root.title-color;
                     muted-color: root.muted-color;
-                    icon: @image-url("../icons/phosphor/envelope-simple-fill.svg");
+                    icon: @image-url("../icons/phosphor/tag-simple-fill.svg");
                     icon-color: root.monochrome-icons ? root.body-color : #2f9cf4;
                 }
 
@@ -502,7 +525,9 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         label: category.name;
                         scope: "Label:" + category.id;
                         mail-drop-enabled: true;
-                        icon: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                        icon: root.selected-scope == "Label:" + category.id
+                            ? @image-url("../icons/phosphor/folder-open-fill.svg")
+                            : @image-url("../icons/phosphor/folder-simple-fill.svg");
                         selected: root.selected-scope == "Label:" + category.id;
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
@@ -530,7 +555,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         hover-background: root.hover-background;
                         body-color: root.title-color;
                         muted-color: root.muted-color;
-                        icon: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                        icon: @image-url("../icons/phosphor/folders-fill.svg");
                         icon-color: root.monochrome-icons ? root.body-color : #22a06b;
                     }
 
@@ -542,10 +567,15 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
 
                         for label in root.mail-labels : SidebarItem {
                             label: label.name;
+                            label-id: label.id;
+                            editable-color: label.color;
                             scope: "Label:" + label.id;
+                            label-manageable: true;
                             mail-drop-enabled: true;
                             mail-drop-copies: true;
-                            icon: @image-url("../icons/phosphor/folder-simple-fill.svg");
+                            icon: root.selected-scope == "Label:" + label.id
+                                ? @image-url("../icons/phosphor/folder-open-fill.svg")
+                                : @image-url("../icons/phosphor/folder-simple-fill.svg");
                             selected: root.selected-scope == "Label:" + label.id;
                             sidebar-background: root.background-color;
                             selection-background: root.selection-background;
@@ -556,6 +586,8 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                                 ? (root.selected-scope == "Label:" + label.id ? root.accent-color : root.muted-color)
                                 : label.color;
                             clicked(scope) => { root.select-scope(scope); }
+                            rename-label(id, name, color) => { root.request-rename-label(id, name, color); }
+                            delete-label(id, name) => { root.request-delete-label(id, name); }
                         }
                     }
                 }

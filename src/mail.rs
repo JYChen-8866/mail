@@ -881,6 +881,13 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn delete_label(&self, id: i64) -> Result<(), String> {
+        self.core
+            .delete_label(id)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn sync_now(&self, account_id: Option<i64>) -> Result<(), String> {
         self.core
             .sync_now(account_id)

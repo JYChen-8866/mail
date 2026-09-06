@@ -3495,6 +3495,56 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     });
 
     let app_weak = app.as_weak();
+    let state_for_delete_label = Rc::clone(&state);
+    let runtime_for_delete_label = Rc::clone(&runtime);
+    app.on_delete_mail_label(move |label_id| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let label_id = i64::from(label_id);
+        let result = (|| {
+            let core = {
+                let state = state_for_delete_label.borrow();
+                let label = state
+                    .labels
+                    .iter()
+                    .find(|label| label.id == label_id)
+                    .ok_or_else(|| "label no longer exists".to_owned())?;
+                if label.is_auto {
+                    return Err("automatic categories cannot be deleted".to_owned());
+                }
+                state
+                    .core
+                    .clone()
+                    .ok_or_else(|| "mail core is unavailable".to_owned())?
+            };
+            runtime_for_delete_label.block_on(core.delete_label(label_id))?;
+            {
+                let mut state = state_for_delete_label.borrow_mut();
+                if state.scope == format!("Label:{label_id}") {
+                    state.scope = "Unified Inbox".to_owned();
+                    state.page = 1;
+                    state.next_cursor = None;
+                    state.selected_id = None;
+                    state.preview_closed = false;
+                }
+            }
+            refresh_from_source(
+                &app,
+                &state_for_delete_label,
+                &runtime_for_delete_label,
+                true,
+            )
+        })();
+        match result {
+            Ok(()) => app.set_render_status(UiMessage::plain("Label deleted.")),
+            Err(error) => {
+                app.set_render_status(UiMessage::detail("Could not delete label: {}", error))
+            }
+        }
+    });
+
+    let app_weak = app.as_weak();
     let state_for_label_search = Rc::clone(&state);
     app.on_search_mail_labels(move |query| {
         let Some(app) = app_weak.upgrade() else {
