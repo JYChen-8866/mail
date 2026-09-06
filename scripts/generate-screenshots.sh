@@ -37,6 +37,8 @@ render() {
   local height="$3"
   local theme="$4"
   local workspace_layout="${5:-default}"
+  local theme_preset="${6:-default}"
+  local active_view="${7:-mail}"
   local style="fluent"
   local data_file="$temporary_dir/$output_name.json"
 
@@ -49,12 +51,28 @@ render() {
   jq \
     --arg theme "$theme" \
     --arg workspace_layout "$workspace_layout" \
+    --arg theme_preset "$theme_preset" \
+    --arg active_view "$active_view" \
     --arg favicon_dir "$favicon_dir" \
     '
+      def complete_mailbox:
+        .account_id = (.account_id // 0)
+        | .folder_id = (.folder_id // -1)
+        | .parent_folder_id = (.parent_folder_id // -1)
+        | .depth = (.depth // 0)
+        | .has_children = (.has_children // false)
+        | .expanded = (.expanded // true)
+        | .is_standard = (.is_standard // true)
+        | .label_has_emoji = (.label_has_emoji // false);
       def favicon_path(address):
         ($favicon_dir + "/" + (address | split("@") | last | ascii_downcase) + ".png");
-      .theme_mode = $theme
+      .mailboxes |= map(complete_mailbox)
+      | .account_mailboxes |= map(complete_mailbox)
+      | .unified_mailboxes |= map(complete_mailbox)
+      | .theme_mode = $theme
       | .workspace_layout = $workspace_layout
+      | .screenshot_theme_preset = $theme_preset
+      | .active_view = $active_view
       | .text_mode = false
       | .selected_favicon = favicon_path(.selected_address)
       | .selected_has_favicon = true
@@ -68,6 +86,8 @@ render() {
   sed \
     -e "s/preferred-width: 1320px/preferred-width: ${width}px/" \
     -e "s/preferred-height: 800px/preferred-height: ${height}px/" \
+    -e 's/in-out property <string> theme_mode: "system";/in-out property <string> theme_mode: "system";\n    in-out property <string> screenshot_theme_preset: "default";/' \
+    -e 's/    changed theme-mode => {/    changed screenshot-theme-preset => { AppTheme.preset = root.screenshot-theme-preset; }\n\n    changed theme-mode => {/' \
     "$ui" > "$temporary_ui"
 
   SLINT_SCALE_FACTOR=2 slint-viewer \
@@ -83,5 +103,13 @@ render desktop-light 1320 800 light
 render desktop-dark 1320 800 dark
 render desktop-minimal-light 1320 800 light minimal
 render desktop-minimal-dark 1320 800 dark minimal
+render desktop-teal-light 1320 800 light default teal
+render desktop-green-light 1320 800 light default green
+render desktop-purple-light 1320 800 light default purple
+render desktop-teal-dark 1320 800 dark default teal
+render desktop-green-dark 1320 800 dark default green
+render desktop-purple-dark 1320 800 dark default purple
+render desktop-calendar-light 1320 800 light default default calendar
+render desktop-contacts-light 1320 800 light default default contacts
 render mobile-light 390 844 light
 render mobile-dark 390 844 dark

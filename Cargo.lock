@@ -2278,6 +2278,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "unicode-properties",
  "url",
  "vello",
  "webbrowser",

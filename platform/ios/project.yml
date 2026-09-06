@@ -30,11 +30,14 @@ targets:
         script: |
           license_root="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Licenses"
           app_license_dir="$license_root/Flectar Mail"
-          font_license_dir="$license_root/Google Sans Flex"
-          mkdir -p "$app_license_dir" "$font_license_dir"
+          google_font_license_dir="$license_root/Google Sans Flex"
+          emoji_font_license_dir="$license_root/Noto Emoji"
+          mkdir -p "$app_license_dir" "$google_font_license_dir" "$emoji_font_license_dir"
           cp "$SRCROOT/../../LICENSE" "$app_license_dir/LICENSE"
           cp -R "$SRCROOT/../../LICENSES" "$app_license_dir/LICENSES"
           cp "$SRCROOT/../../THIRD_PARTY_NOTICES.md" "$app_license_dir/THIRD_PARTY_NOTICES.md"
-          cp "$SRCROOT/../../resources/fonts/google-sans-flex/OFL.txt" "$font_license_dir/OFL.txt"
-          cp "$SRCROOT/../../resources/fonts/google-sans-flex/README.md" "$font_license_dir/README.md"
+          cp "$SRCROOT/../../resources/fonts/google-sans-flex/OFL.txt" "$google_font_license_dir/OFL.txt"
+          cp "$SRCROOT/../../resources/fonts/google-sans-flex/README.md" "$google_font_license_dir/README.md"
+          cp "$SRCROOT/../../resources/fonts/noto-emoji/OFL.txt" "$emoji_font_license_dir/OFL.txt"
+          cp "$SRCROOT/../../resources/fonts/noto-emoji/README.md" "$emoji_font_license_dir/README.md"
         basedOnDependencyAnalysis: false

@@ -15,7 +15,8 @@ rm -rf "$app_dir"
 mkdir -p \
   "$app_dir/Contents/MacOS" \
   "$app_dir/Contents/Resources/Licenses/Flectar Mail" \
-  "$app_dir/Contents/Resources/Licenses/Google Sans Flex"
+  "$app_dir/Contents/Resources/Licenses/Google Sans Flex" \
+  "$app_dir/Contents/Resources/Licenses/Noto Emoji"
 cp "$binary_path" "$app_dir/Contents/MacOS/flectar-mail"
 
 icon_source="$project_dir/resources/app-icon/flectar-mail-masked.png"
@@ -43,6 +44,10 @@ cp "$project_dir/resources/fonts/google-sans-flex/OFL.txt" \
   "$app_dir/Contents/Resources/Licenses/Google Sans Flex/OFL.txt"
 cp "$project_dir/resources/fonts/google-sans-flex/README.md" \
   "$app_dir/Contents/Resources/Licenses/Google Sans Flex/README.md"
+cp "$project_dir/resources/fonts/noto-emoji/OFL.txt" \
+  "$app_dir/Contents/Resources/Licenses/Noto Emoji/OFL.txt"
+cp "$project_dir/resources/fonts/noto-emoji/README.md" \
+  "$app_dir/Contents/Resources/Licenses/Noto Emoji/README.md"
 
 version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$project_dir/Cargo.toml" | head -1)"
 sed \

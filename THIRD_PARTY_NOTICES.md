@@ -34,6 +34,12 @@ The bundled Google Sans Flex font is distributed under the SIL Open Font
 License 1.1. Its license, provenance, and checksum are retained in
 [`resources/fonts/google-sans-flex`](resources/fonts/google-sans-flex).
 
+## Noto Emoji
+
+The bundled Noto Emoji font is distributed under the SIL Open Font License
+1.1. Its license, provenance, and checksum are retained in
+[`resources/fonts/noto-emoji`](resources/fonts/noto-emoji).
+
 ## Screenshot examples
 
 The fictional screenshot fixture uses real public sender domains so the same

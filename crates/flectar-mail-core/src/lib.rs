@@ -57,6 +57,24 @@ const MAX_DRAFT_BODY_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CACHED_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_CACHED_HEADER_BYTES: usize = 256 * 1024;
 
+fn validate_folder_leaf(value: &str) -> Result<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(CoreError::Other("folder name cannot be empty".into()));
+    }
+    if value.chars().count() > 255 {
+        return Err(CoreError::Other(
+            "folder name cannot be longer than 255 characters".into(),
+        ));
+    }
+    if value.chars().any(char::is_control) {
+        return Err(CoreError::Other(
+            "folder name cannot contain control characters".into(),
+        ));
+    }
+    Ok(value.to_owned())
+}
+
 pub use crate::db::repo::notifications::{NotificationOutboxItem, RoutedTab};
 pub use crate::db::snapshot::DatabaseSnapshotManifest;
 
@@ -1740,13 +1758,47 @@ impl Core {
         account_id: Option<i64>,
         folder_id: Option<i64>,
     ) -> Result<usize> {
+        self.count_threads_filtered(view, None, account_id, None, folder_id)
+            .await
+    }
+
+    /// Exact count for any native sidebar scope, including Important/Other
+    /// and manual or automatic labels.
+    pub async fn count_threads_filtered(
+        &self,
+        view: View,
+        split_id: Option<i64>,
+        account_id: Option<i64>,
+        label_id: Option<i64>,
+        folder_id: Option<i64>,
+    ) -> Result<usize> {
+        use repo::threads::TabFilter;
+        let tab = if let Some(label_id) = label_id {
+            let is_auto = self
+                .db
+                .read(move |conn| Ok(repo::labels::get(conn, label_id)?.map(|l| l.is_auto)))
+                .await?
+                .unwrap_or(false);
+            Some(if is_auto {
+                TabFilter::AutoLabel(label_id)
+            } else {
+                TabFilter::ManualLabel(label_id)
+            })
+        } else {
+            match split_id {
+                Some(-1) => Some(TabFilter::Important),
+                Some(-2) => Some(TabFilter::Other),
+                Some(id) if id > 0 => Some(TabFilter::Split(id)),
+                _ => None,
+            }
+        };
         self.db
             .read(move |conn| {
                 repo::threads::count(
                     conn,
                     &repo::threads::ListArgs {
                         view,
-                        tab: None,
+                        tab,
                         account_id,
                         folder_id,
                         cursor: None,
@@ -2277,6 +2329,284 @@ impl Core {
         self.db
             .read(move |conn| repo::folders::list_info(conn, account_id))
             .await
+    }
+
+    pub async fn create_folder(
+        &self,
+        account_id: i64,
+        parent_folder_id: Option<i64>,
+        name: String,
+    ) -> Result<()> {
+        let name = validate_folder_leaf(&name)?;
+        let config = self.folder_account_config(account_id).await?;
+        let parent = match parent_folder_id {
+            Some(folder_id) => Some(self.editable_folder(account_id, folder_id).await?),
+            None => None,
+        };
+        if config.provider == Provider::Gmail {
+            if name.contains('/') {
+                return Err(CoreError::Other(
+                    "folder names cannot contain the hierarchy separator \"/\"".into(),
+                ));
+            }
+            let full_name = parent
+                .as_ref()
+                .map(|parent| format!("{}/{}", parent.imap_name, name))
+                .unwrap_or(name);
+            sync::gmail::create_user_folder(&self.sync_ctx(), &config, &full_name).await?;
+        } else if config.mail_protocol == MailProtocol::Jmap {
+            let secret =
+                credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+                    .await?;
+            let connected = jmap::client::connect(&config, &secret).await?;
+            let parent_remote = parent.as_ref().and_then(|folder| folder.jmap_id.clone());
+            let mailbox = connected
+                .client
+                .mailbox_create(&name, parent_remote, jmap_client::mailbox::Role::None)
+                .await
+                .map_err(jmap::client::map_error)?;
+            let remote_id = mailbox
+                .id()
+                .ok_or_else(|| CoreError::Jmap("Mailbox/set returned no id".into()))?
+                .to_owned();
+            let display_path = parent
+                .as_ref()
+                .map(|parent| format!("{} / {name}", parent.imap_name))
+                .unwrap_or(name);
+            self.db
+                .write(move |conn| {
+                    repo::folders::upsert_jmap(conn, account_id, &remote_id, &display_path, None)?;
+                    Ok(())
+                })
+                .await?;
+        } else {
+            let delimiter = match parent.as_ref().and_then(|folder| folder.delimiter.clone()) {
+                Some(delimiter) if !delimiter.is_empty() => delimiter,
+                _ => {
+                    self.db
+                        .read(move |conn| {
+                            Ok(repo::folders::list(conn, Some(account_id))?
+                                .into_iter()
+                                .find_map(|folder| {
+                                    folder.delimiter.filter(|value| !value.is_empty())
+                                })
+                                .unwrap_or_else(|| "/".into()))
+                        })
+                        .await?
+                }
+            };
+            if name.contains(&delimiter) {
+                return Err(CoreError::Other(format!(
+                    "folder names cannot contain the hierarchy separator {delimiter:?}"
+                )));
+            }
+            let encoded_leaf = imap::encode_mailbox_name(&name);
+            let remote_name = parent
+                .as_ref()
+                .map(|parent| format!("{}{delimiter}{encoded_leaf}", parent.imap_name))
+                .unwrap_or(encoded_leaf);
+            let mut session = self.connect_folder_imap(&config).await?;
+            imap::create_folder(&mut session, &remote_name).await?;
+            imap::logout(session).await;
+            self.db
+                .write(move |conn| {
+                    repo::folders::upsert(conn, account_id, &remote_name, Some(&delimiter), None)?;
+                    Ok(())
+                })
+                .await?;
+        }
+        self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
+        Ok(())
+    }
+
+    pub async fn rename_folder(&self, folder_id: i64, name: String) -> Result<()> {
+        let name = validate_folder_leaf(&name)?;
+        let folder = self
+            .db
+            .read(move |conn| repo::folders::get(conn, folder_id))
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("folder {folder_id}")))?;
+        if folder.role.is_some() {
+            return Err(CoreError::Other("system folders cannot be renamed".into()));
+        }
+        let account_id = folder.account_id;
+        let config = self.folder_account_config(account_id).await?;
+        let delimiter = if config.mail_protocol == MailProtocol::Jmap {
+            " / ".to_owned()
+        } else {
+            folder.delimiter.clone().unwrap_or_else(|| "/".into())
+        };
+        if name.contains(&delimiter) {
+            return Err(CoreError::Other(format!(
+                "folder names cannot contain the hierarchy separator {delimiter:?}"
+            )));
+        }
+        let old_name = folder.imap_name.clone();
+        let parent_prefix = old_name.rsplit_once(&delimiter).map(|(parent, _)| parent);
+        if config.provider == Provider::Gmail {
+            let full_name = parent_prefix
+                .map(|parent| format!("{parent}{delimiter}{name}"))
+                .unwrap_or(name);
+            sync::gmail::rename_user_folder(&self.sync_ctx(), &config, folder_id, &full_name)
+                .await?;
+        } else if config.mail_protocol == MailProtocol::Jmap {
+            let secret =
+                credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+                    .await?;
+            let connected = jmap::client::connect(&config, &secret).await?;
+            let remote_id = folder
+                .jmap_id
+                .as_deref()
+                .ok_or_else(|| CoreError::NotFound(format!("remote folder {folder_id}")))?;
+            connected
+                .client
+                .mailbox_rename(remote_id, &name)
+                .await
+                .map_err(jmap::client::map_error)?;
+            let new_name = parent_prefix
+                .map(|parent| format!("{parent}{delimiter}{name}"))
+                .unwrap_or(name);
+            self.db
+                .write(move |conn| {
+                    repo::folders::rename_tree(conn, account_id, &old_name, &new_name, &delimiter)
+                })
+                .await?;
+        } else {
+            let encoded = imap::encode_mailbox_name(&name);
+            let new_name = parent_prefix
+                .map(|parent| format!("{parent}{delimiter}{encoded}"))
+                .unwrap_or(encoded);
+            let mut session = self.connect_folder_imap(&config).await?;
+            imap::rename_folder(&mut session, &old_name, &new_name).await?;
+            imap::logout(session).await;
+            self.db
+                .write(move |conn| {
+                    repo::folders::rename_tree(conn, account_id, &old_name, &new_name, &delimiter)
+                })
+                .await?;
+        }
+        self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
+        Ok(())
+    }
+
+    pub async fn delete_folder(&self, folder_id: i64) -> Result<()> {
+        let folder = self
+            .db
+            .read(move |conn| repo::folders::get(conn, folder_id))
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("folder {folder_id}")))?;
+        if folder.role.is_some() {
+            return Err(CoreError::Other("system folders cannot be deleted".into()));
+        }
+        let account_id = folder.account_id;
+        let config = self.folder_account_config(account_id).await?;
+        let delimiter = if config.mail_protocol == MailProtocol::Jmap {
+            " / ".to_owned()
+        } else {
+            folder.delimiter.clone().unwrap_or_else(|| "/".into())
+        };
+        let prefix = format!("{}{delimiter}", folder.imap_name);
+        let mut tree = self
+            .db
+            .read(move |conn| {
+                Ok(repo::folders::list(conn, Some(account_id))?
+                    .into_iter()
+                    .filter(|candidate| {
+                        candidate.id == folder_id || candidate.imap_name.starts_with(&prefix)
+                    })
+                    .collect::<Vec<_>>())
+            })
+            .await?;
+        tree.sort_by_key(|candidate| std::cmp::Reverse(candidate.imap_name.len()));
+        if config.provider == Provider::Gmail {
+            for candidate in &tree {
+                sync::gmail::delete_user_folder(&self.sync_ctx(), &config, candidate.id).await?;
+            }
+        } else if config.mail_protocol == MailProtocol::Jmap {
+            let secret =
+                credentials::load_async(self.credentials.clone(), config.id, Slot::Password)
+                    .await?;
+            let connected = jmap::client::connect(&config, &secret).await?;
+            for candidate in &tree {
+                let remote_id = candidate.jmap_id.as_deref().ok_or_else(|| {
+                    CoreError::NotFound(format!("remote folder {}", candidate.id))
+                })?;
+                connected
+                    .client
+                    .mailbox_destroy(remote_id, true)
+                    .await
+                    .map_err(jmap::client::map_error)?;
+            }
+            let root_name = folder.imap_name;
+            self.db
+                .write(move |conn| {
+                    repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
+                })
+                .await?;
+        } else {
+            let mut session = self.connect_folder_imap(&config).await?;
+            for candidate in &tree {
+                imap::delete_folder(&mut session, &candidate.imap_name).await?;
+            }
+            imap::logout(session).await;
+            let root_name = folder.imap_name;
+            self.db
+                .write(move |conn| {
+                    repo::folders::delete_tree(conn, account_id, &root_name, &delimiter)
+                })
+                .await?;
+        }
+        self.bus.emit(CoreEvent::MailUpdated { thread_ids: vec![] });
+        Ok(())
+    }
+
+    async fn folder_account_config(&self, account_id: i64) -> Result<AccountConfig> {
+        self.db
+            .read(move |conn| repo::accounts::get_config(conn, account_id))
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("account {account_id}")))
+    }
+
+    async fn editable_folder(
+        &self,
+        account_id: i64,
+        folder_id: i64,
+    ) -> Result<repo::folders::Folder> {
+        let folder = self
+            .db
+            .read(move |conn| repo::folders::get(conn, folder_id))
+            .await?
+            .ok_or_else(|| CoreError::NotFound(format!("folder {folder_id}")))?;
+        if folder.account_id != account_id {
+            return Err(CoreError::Other(
+                "parent folder belongs to another account".into(),
+            ));
+        }
+        if folder.role.is_some() {
+            return Err(CoreError::Other(
+                "system folders cannot contain subfolders here".into(),
+            ));
+        }
+        Ok(folder)
+    }
+
+    async fn connect_folder_imap(&self, config: &AccountConfig) -> Result<imap::Session> {
+        let credentials = match config.auth_kind {
+            AuthKind::Password => imap::ImapCredentials::Password {
+                user: config.username.clone(),
+                password: credentials::load_async(
+                    self.credentials.clone(),
+                    config.id,
+                    Slot::Password,
+                )
+                .await?,
+            },
+            AuthKind::Oauth2 => imap::ImapCredentials::XOAuth2 {
+                user: config.username.clone(),
+                access_token: self.tokens.access_token(config.id, config.provider).await?,
+            },
+        };
+        imap::connect(&config.imap_host, config.imap_port, credentials).await
     }
 
     pub async fn perform_action(&self, args: PerformActionArgs) -> Result<ActionResult> {
@@ -5092,6 +5422,39 @@ impl Core {
 
     pub async fn list_labels(&self) -> Result<Vec<Label>> {
         self.db.read(|conn| repo::labels::list(conn)).await
+    }
+
+    /// Explicitly place one thread in a built-in or automatic category. This
+    /// is used by native drag-and-drop targets; `apply_tab` also keeps the
+    /// visible auto-label chip in sync with the exclusive route.
+    pub async fn route_thread_to_tab(&self, thread_id: i64, target: String) -> Result<()> {
+        self.db
+            .write(move |conn| {
+                let valid = match target.as_str() {
+                    "important" | "other" => true,
+                    value if value.starts_with("label:") => {
+                        let Some(id) = value
+                            .strip_prefix("label:")
+                            .and_then(|id| id.parse::<i64>().ok())
+                        else {
+                            return Err(CoreError::Other(
+                                "invalid mail category destination".into(),
+                            ));
+                        };
+                        repo::labels::get(conn, id)?.is_some_and(|label| label.is_auto)
+                    }
+                    _ => false,
+                };
+                if !valid {
+                    return Err(CoreError::Other("invalid mail category destination".into()));
+                }
+                route::apply_tab(conn, thread_id, Some(&target))
+            })
+            .await?;
+        self.bus.emit(CoreEvent::MailUpdated {
+            thread_ids: vec![thread_id],
+        });
+        Ok(())
     }
 
     pub async fn save_label(

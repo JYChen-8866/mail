@@ -5,11 +5,12 @@ use flectar_mail_core::{
     config::Paths,
     events::CoreEvent,
     models::{
-        Account, AccountConfig, ActionKind, AddPasswordAccountArgs, Address, CalendarConnection,
-        CalendarEvent, ConnectCalendarArgs, ContactRecordCursor, ContactRecordPage,
-        CreateEventArgs, DraftAttachmentIn, FolderInfo, MailHistory, MailboxBadgeCounts,
-        ActionParams, Label, MessageDetail, PerformActionArgs, PortableAccountConfig, Provider,
-        QueueSendArgs, QueueSendResult, SaveDraftArgs, Settings, ThreadCursor, ThreadSummary, View,
+        Account, AccountConfig, ActionKind, ActionParams, AddPasswordAccountArgs, Address,
+        CalendarConnection, CalendarEvent, ConnectCalendarArgs, ContactRecordCursor,
+        ContactRecordPage, CreateEventArgs, CustomTheme, DraftAttachmentIn, FolderInfo, Label,
+        MailHistory, MailboxBadgeCounts, MessageDetail, PerformActionArgs, PortableAccountConfig,
+        Provider, QueueSendArgs, QueueSendResult, SaveDraftArgs, Settings, ThreadCursor,
+        ThreadSummary, View,
     },
 };
 #[cfg(test)]
@@ -40,6 +41,7 @@ pub struct EmailFixture {
 pub struct MailMessage {
     pub id: i32,
     pub thread_id: Option<i64>,
+    pub account_id: i64,
     pub account: String,
     pub folder: String,
     pub sender: String,
@@ -70,6 +72,7 @@ impl MailMessage {
         Self {
             id: email.id,
             thread_id: None,
+            account_id: -1,
             account: email.account.to_owned(),
             folder: email.folder.to_owned(),
             sender: email.sender.to_owned(),
@@ -95,6 +98,11 @@ impl MailMessage {
 #[derive(Clone, Debug)]
 pub struct MailboxEntry {
     pub account_id: i64,
+    pub folder_id: i64,
+    pub parent_folder_id: i64,
+    pub depth: usize,
+    pub has_children: bool,
+    pub is_standard: bool,
     pub label: String,
     pub scope: String,
     pub context: String,
@@ -252,7 +260,8 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())?;
         let (scope, page) = match self.core.list_folders(None).await {
             Ok(folders) => {
-                let scope = validated_startup_scope(preferred_scope, &accounts, &folders);
+                let labels = self.core.list_labels().await.unwrap_or_default();
+                let scope = validated_startup_scope(preferred_scope, &accounts, &folders, &labels);
                 let page = self
                     .load_page_with_context(PageLoadContext {
                         scope: &scope,
@@ -286,7 +295,12 @@ impl CoreMailSource {
             .list_folders(None)
             .await
             .map_err(|error| error.to_string())?;
-        self.load_mail_metadata_with_context(scope, &accounts, &folders)
+        let labels = self
+            .core
+            .list_labels()
+            .await
+            .map_err(|error| error.to_string())?;
+        self.load_mail_metadata_with_context(scope, &accounts, &folders, &labels)
             .await
     }
 
@@ -295,14 +309,15 @@ impl CoreMailSource {
         scope: &str,
         accounts: &[Account],
         folders: &[FolderInfo],
+        labels: &[Label],
     ) -> Result<MailMetadata, String> {
         let badges = self
             .core
             .mailbox_badge_counts()
             .await
             .map_err(|error| error.to_string())?;
-        let (account_id, folder_id, view, _) = resolve_scope(scope, accounts, folders);
-        let scope_total = count_threads(&self.core, view, account_id, folder_id).await?;
+        let resolved = resolve_scope(scope, accounts, folders, labels);
+        let scope_total = count_threads(&self.core, &resolved).await?;
         Ok(MailMetadata {
             scope: scope.to_owned(),
             scope_total,
@@ -328,9 +343,14 @@ impl CoreMailSource {
             accounts,
             folders,
         } = context;
+        let labels = self
+            .core
+            .list_labels()
+            .await
+            .map_err(|error| error.to_string())?;
         let metadata = if include_counts {
             Some(
-                self.load_mail_metadata_with_context(scope, accounts, folders)
+                self.load_mail_metadata_with_context(scope, accounts, folders, &labels)
                     .await?,
             )
         } else {
@@ -340,12 +360,19 @@ impl CoreMailSource {
             .as_ref()
             .map(|metadata| metadata.mailboxes.clone())
             .unwrap_or_else(|| mailbox_entries(accounts, folders));
-        let (account_id, folder_id, view, folder_label) = resolve_scope(scope, accounts, folders);
+        let resolved = resolve_scope(scope, accounts, folders, &labels);
 
         let (threads, next_cursor) = if query.trim().is_empty() {
             let page = self
                 .core
-                .list_threads(view, None, account_id, None, folder_id, (cursor, limit))
+                .list_threads(
+                    resolved.view,
+                    resolved.split_id,
+                    resolved.account_id,
+                    resolved.label_id,
+                    resolved.folder_id,
+                    (cursor, limit),
+                )
                 .await
                 .map_err(|error| error.to_string())?;
             (page.threads, page.next_cursor)
@@ -354,20 +381,15 @@ impl CoreMailSource {
             // It currently returns one bounded result page without a cursor.
             let results = self
                 .core
-                .search(query.trim().to_owned(), account_id, limit)
+                .search(query.trim().to_owned(), resolved.account_id, limit)
                 .await
                 .map_err(|error| error.to_string())?;
             (results, None)
         };
 
-        let labels = self
-            .core
-            .list_labels()
-            .await
-            .map_err(|error| error.to_string())?;
         let messages = threads
             .into_iter()
-            .filter_map(|thread| summary_to_message(thread, accounts, folder_label.as_str()))
+            .filter_map(|thread| summary_to_message(thread, accounts, resolved.title.as_str()))
             .collect();
 
         Ok(MailPage {
@@ -487,6 +509,32 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn create_folder(
+        &self,
+        account_id: i64,
+        parent_folder_id: Option<i64>,
+        name: String,
+    ) -> Result<(), String> {
+        self.core
+            .create_folder(account_id, parent_folder_id, name)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn rename_folder(&self, folder_id: i64, name: String) -> Result<(), String> {
+        self.core
+            .rename_folder(folder_id, name)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn delete_folder(&self, folder_id: i64) -> Result<(), String> {
+        self.core
+            .delete_folder(folder_id)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn load_account_configs(&self) -> Result<Vec<AccountConfig>, String> {
         self.core
             .list_account_configs()
@@ -592,6 +640,28 @@ impl CoreMailSource {
             _ => "system",
         }
         .to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn set_theme_preset(&self, preset: &str) -> Result<(), String> {
+        let mut settings = self.load_settings().await?;
+        settings.theme_preset = match preset {
+            "teal" | "green" | "purple" | "custom" => preset,
+            _ => "default",
+        }
+        .to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn set_custom_theme(&self, custom_theme: CustomTheme) -> Result<(), String> {
+        let mut settings = self.load_settings().await?;
+        settings.custom_theme = custom_theme;
         self.core
             .set_settings(settings)
             .await
@@ -749,6 +819,33 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    pub async fn move_thread_to_folder(
+        &self,
+        thread_id: i64,
+        target_folder_id: i64,
+    ) -> Result<(), String> {
+        self.core
+            .perform_action(PerformActionArgs {
+                kind: ActionKind::Move,
+                thread_ids: vec![thread_id],
+                params: Some(ActionParams {
+                    wake_at: None,
+                    target_folder_id: Some(target_folder_id),
+                    label_id: None,
+                }),
+            })
+            .await
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn route_thread_to_tab(&self, thread_id: i64, target: String) -> Result<(), String> {
+        self.core
+            .route_thread_to_tab(thread_id, target)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn save_label(
         &self,
         id: Option<i64>,
@@ -780,6 +877,13 @@ impl CoreMailSource {
         };
         self.core
             .save_label(id, name.to_owned(), color.to_owned(), position)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn delete_label(&self, id: i64) -> Result<(), String> {
+        self.core
+            .delete_label(id)
             .await
             .map_err(|error| error.to_string())
     }
@@ -1089,12 +1193,36 @@ fn standard_account_view(label: &str) -> Option<View> {
     }
 }
 
+fn standard_folder_role(label: &str) -> Option<&'static str> {
+    match label {
+        "Inbox" => Some("inbox"),
+        "Sent" => Some("sent"),
+        "Archive" => Some("archive"),
+        "Spam" => Some("spam"),
+        "Trash" => Some("trash"),
+        "Drafts" => Some("drafts"),
+        _ => None,
+    }
+}
+
+fn is_standard_folder(folder: &FolderInfo) -> bool {
+    matches!(
+        folder.role.as_deref(),
+        Some("inbox" | "sent" | "archive" | "spam" | "trash" | "drafts")
+    )
+}
+
 fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxEntry> {
     let mut entries = Vec::new();
     for account in accounts {
         let account_label = account_label(account);
         entries.push(MailboxEntry {
             account_id: account.id,
+            folder_id: -1,
+            parent_folder_id: -1,
+            depth: 0,
+            has_children: false,
+            is_standard: false,
             label: account_label.clone(),
             scope: account_label.clone(),
             context: account_label.clone(),
@@ -1105,8 +1233,19 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
         });
 
         for label in STANDARD_ACCOUNT_FOLDERS {
+            let expected_role = standard_folder_role(label);
+            let role_folder = expected_role.and_then(|role| {
+                folders.iter().find(|folder| {
+                    folder.account_id == account.id && folder.role.as_deref() == Some(role)
+                })
+            });
             entries.push(MailboxEntry {
                 account_id: account.id,
+                folder_id: role_folder.map_or(-1, |folder| folder.id),
+                parent_folder_id: -1,
+                depth: 0,
+                has_children: false,
+                is_standard: true,
                 label: label.to_owned(),
                 scope: format!("{account_label} / {label}"),
                 context: account_label.clone(),
@@ -1119,18 +1258,46 @@ fn mailbox_entries(accounts: &[Account], folders: &[FolderInfo]) -> Vec<MailboxE
 
         let mut custom_folders: Vec<&FolderInfo> = folders
             .iter()
-            .filter(|folder| {
-                folder.account_id == account.id
-                    && standard_account_view(&folder_label(folder)).is_none()
-            })
+            .filter(|folder| folder.account_id == account.id && !is_standard_folder(folder))
             .collect();
-        custom_folders.sort_by_key(|folder| folder.imap_name.to_lowercase());
+        custom_folders.sort_by_key(|folder| folder.display_name.to_lowercase());
+        let custom_ids = custom_folders
+            .iter()
+            .map(|folder| (folder.imap_name.as_str(), folder.id))
+            .collect::<std::collections::HashMap<_, _>>();
+        let parent_ids = custom_folders
+            .iter()
+            .map(|folder| {
+                let parent = folder
+                    .is_jmap
+                    .then_some(" / ")
+                    .or(folder.delimiter.as_deref())
+                    .filter(|delimiter| !delimiter.is_empty())
+                    .and_then(|delimiter| folder.imap_name.rsplit_once(delimiter))
+                    .and_then(|(parent, _)| custom_ids.get(parent).copied())
+                    .unwrap_or(-1);
+                (folder.id, parent)
+            })
+            .collect::<std::collections::HashMap<_, _>>();
         for folder in custom_folders {
             let label = folder_label(folder);
+            let parent_folder_id = parent_ids.get(&folder.id).copied().unwrap_or(-1);
+            let mut depth = 0usize;
+            let mut parent = parent_folder_id;
+            let mut visited = std::collections::HashSet::new();
+            while parent >= 0 && visited.insert(parent) {
+                depth += 1;
+                parent = parent_ids.get(&parent).copied().unwrap_or(-1);
+            }
             entries.push(MailboxEntry {
                 account_id: account.id,
+                folder_id: folder.id,
+                parent_folder_id,
+                depth,
+                has_children: parent_ids.values().any(|parent| *parent == folder.id),
+                is_standard: false,
                 label: label.clone(),
-                scope: format!("{account_label} / {label}"),
+                scope: format!("Folder:{}", folder.id),
                 context: account_label.clone(),
                 detail: String::new(),
                 avatar: String::new(),
@@ -1163,15 +1330,16 @@ fn mailbox_entries_with_counts(
     entries
 }
 
-async fn count_threads(
-    core: &Core,
-    view: View,
-    account_id: Option<i64>,
-    folder_id: Option<i64>,
-) -> Result<usize, String> {
-    core.count_threads(view, account_id, folder_id)
-        .await
-        .map_err(|error| error.to_string())
+async fn count_threads(core: &Core, resolved: &ScopeResolution) -> Result<usize, String> {
+    core.count_threads_filtered(
+        resolved.view,
+        resolved.split_id,
+        resolved.account_id,
+        resolved.label_id,
+        resolved.folder_id,
+    )
+    .await
+    .map_err(|error| error.to_string())
 }
 
 fn unified_mailbox_entries(badges: &[MailboxBadgeCounts]) -> Vec<MailboxEntry> {
@@ -1193,6 +1361,11 @@ fn unified_mailbox_entries(badges: &[MailboxBadgeCounts]) -> Vec<MailboxEntry> {
     for (label, scope) in mailboxes {
         entries.push(MailboxEntry {
             account_id: 0,
+            folder_id: -1,
+            parent_folder_id: -1,
+            depth: 0,
+            has_children: false,
+            is_standard: true,
             label: label.to_owned(),
             scope: scope.to_owned(),
             context: "Unified".to_owned(),
@@ -1219,13 +1392,30 @@ fn mailbox_badge(label: &str, counts: &MailboxBadgeCounts) -> String {
     }
 }
 
+struct ScopeResolution {
+    account_id: Option<i64>,
+    folder_id: Option<i64>,
+    split_id: Option<i64>,
+    label_id: Option<i64>,
+    view: View,
+    title: String,
+}
+
 fn resolve_scope(
     scope: &str,
     accounts: &[Account],
     folders: &[FolderInfo],
-) -> (Option<i64>, Option<i64>, View, String) {
+    labels: &[Label],
+) -> ScopeResolution {
     if scope == "Unified Inbox" {
-        return (None, None, View::Inbox, "Inbox".to_owned());
+        return ScopeResolution {
+            account_id: None,
+            folder_id: None,
+            split_id: None,
+            label_id: None,
+            view: View::Inbox,
+            title: "Inbox".to_owned(),
+        };
     }
     if let Some(view) = match scope {
         "Unified Starred" => Some(View::Starred),
@@ -1236,12 +1426,59 @@ fn resolve_scope(
         "Unified Drafts" => Some(View::Drafts),
         _ => None,
     } {
-        return (
-            None,
-            None,
+        return ScopeResolution {
+            account_id: None,
+            folder_id: None,
+            split_id: None,
+            label_id: None,
             view,
-            scope.trim_start_matches("Unified ").to_owned(),
-        );
+            title: scope.trim_start_matches("Unified ").to_owned(),
+        };
+    }
+
+    if matches!(scope, "Important" | "Other") {
+        return ScopeResolution {
+            account_id: None,
+            folder_id: None,
+            split_id: Some(if scope == "Important" { -1 } else { -2 }),
+            label_id: None,
+            view: View::Inbox,
+            title: scope.to_owned(),
+        };
+    }
+
+    if let Some(label_id) = scope
+        .strip_prefix("Label:")
+        .and_then(|id| id.parse::<i64>().ok())
+        && let Some(label) = labels.iter().find(|label| label.id == label_id)
+    {
+        return ScopeResolution {
+            account_id: None,
+            folder_id: None,
+            split_id: None,
+            label_id: Some(label_id),
+            view: if label.is_auto {
+                View::Inbox
+            } else {
+                View::All
+            },
+            title: label.name.clone(),
+        };
+    }
+
+    if let Some(folder_id) = scope
+        .strip_prefix("Folder:")
+        .and_then(|id| id.parse::<i64>().ok())
+        && let Some(folder) = folders.iter().find(|folder| folder.id == folder_id)
+    {
+        return ScopeResolution {
+            account_id: Some(folder.account_id),
+            folder_id: Some(folder.id),
+            split_id: None,
+            label_id: None,
+            view: view_for_folder(folder),
+            title: folder_label(folder),
+        };
     }
 
     if let Some((account_name, folder_name)) = scope.split_once(" / ")
@@ -1250,18 +1487,27 @@ fn resolve_scope(
             .find(|account| account_label(account) == account_name)
     {
         if let Some(view) = standard_account_view(folder_name) {
-            return (Some(account.id), None, view, folder_name.to_owned());
+            return ScopeResolution {
+                account_id: Some(account.id),
+                folder_id: None,
+                split_id: None,
+                label_id: None,
+                view,
+                title: folder_name.to_owned(),
+            };
         }
         if let Some(folder) = folders
             .iter()
             .find(|folder| folder.account_id == account.id && folder_label(folder) == folder_name)
         {
-            return (
-                Some(account.id),
-                Some(folder.id),
-                view_for_folder(folder),
-                folder_name.to_owned(),
-            );
+            return ScopeResolution {
+                account_id: Some(account.id),
+                folder_id: Some(folder.id),
+                split_id: None,
+                label_id: None,
+                view: view_for_folder(folder),
+                title: folder_name.to_owned(),
+            };
         }
     }
 
@@ -1269,7 +1515,14 @@ fn resolve_scope(
         .iter()
         .find(|account| account_label(account) == scope)
         .map(|account| account.id);
-    (account_id, None, View::Inbox, "Inbox".to_owned())
+    ScopeResolution {
+        account_id,
+        folder_id: None,
+        split_id: None,
+        label_id: None,
+        view: View::Inbox,
+        title: "Inbox".to_owned(),
+    }
 }
 
 /// A warm-start scope is presentation data and can outlive an account rename
@@ -1279,6 +1532,7 @@ fn validated_startup_scope(
     preferred_scope: &str,
     accounts: &[Account],
     folders: &[FolderInfo],
+    labels: &[Label],
 ) -> String {
     const UNIFIED_SCOPES: [&str; 7] = [
         "Unified Inbox",
@@ -1290,6 +1544,11 @@ fn validated_startup_scope(
         "Unified Drafts",
     ];
     if UNIFIED_SCOPES.contains(&preferred_scope)
+        || matches!(preferred_scope, "Important" | "Other")
+        || preferred_scope
+            .strip_prefix("Label:")
+            .and_then(|id| id.parse::<i64>().ok())
+            .is_some_and(|id| labels.iter().any(|label| label.id == id))
         || mailbox_entries(accounts, folders)
             .iter()
             .any(|mailbox| mailbox.scope == preferred_scope)
@@ -1324,6 +1583,7 @@ fn summary_to_message(
     Some(MailMessage {
         id,
         thread_id: Some(thread.id),
+        account_id: thread.account_id,
         account,
         folder: folder.to_owned(),
         sender: sender.clone(),
@@ -1365,6 +1625,7 @@ fn detail_to_message(row: &MailMessage, message: &MessageDetail) -> MailMessage 
     MailMessage {
         id: row.id,
         thread_id: row.thread_id,
+        account_id: row.account_id,
         account: row.account.clone(),
         folder: row.folder.clone(),
         sender: sender.clone(),
@@ -1441,7 +1702,14 @@ fn folder_label(folder: &FolderInfo) -> String {
         Some("drafts") => "Drafts".to_owned(),
         Some("trash") => "Trash".to_owned(),
         Some("spam") => "Spam".to_owned(),
-        _ => folder.imap_name.clone(),
+        _ => folder
+            .is_jmap
+            .then_some(" / ")
+            .or(folder.delimiter.as_deref())
+            .filter(|delimiter| !delimiter.is_empty())
+            .and_then(|delimiter| folder.display_name.rsplit_once(delimiter))
+            .map(|(_, leaf)| leaf.trim().to_owned())
+            .unwrap_or_else(|| folder.display_name.clone()),
     }
 }
 
@@ -1837,10 +2105,27 @@ pub fn fixtures() -> Vec<EmailFixture> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ComposeMessage, compose_args, markdown_to_html, markdown_to_plain_text,
-        readable_message_html, relative_time_at,
+        ComposeMessage, compose_args, mailbox_entries, markdown_to_html, markdown_to_plain_text,
+        readable_message_html, relative_time_at, resolve_scope, validated_startup_scope,
     };
     use chrono::{Local, TimeZone};
+    use flectar_mail_core::models::{
+        Account, AuthKind, FolderInfo, Label, MailProtocol, Provider, View,
+    };
+
+    fn test_account() -> Account {
+        Account {
+            id: 1,
+            email: "person@example.com".into(),
+            display_name: Some("Person".into()),
+            avatar_url: None,
+            provider: Provider::Imap,
+            auth_kind: AuthKind::Password,
+            mail_protocol: MailProtocol::Imap,
+            sync_state: "idle".into(),
+            sync_error: None,
+        }
+    }
 
     #[test]
     fn empty_in_flight_body_falls_back_to_the_message_snippet() {
@@ -1957,6 +2242,106 @@ mod tests {
         assert_eq!(
             draft.body_html.as_deref(),
             Some("<div>Hello <strong>Maya</strong></div>")
+        );
+    }
+
+    #[test]
+    fn mailbox_entries_preserve_unicode_hierarchy_and_stable_ids() {
+        let folders = vec![
+            FolderInfo {
+                id: 10,
+                account_id: 1,
+                display_name: "☺ Projects".into(),
+                is_jmap: false,
+                imap_name: "&Jjo- Projects".into(),
+                delimiter: Some("/".into()),
+                role: None,
+            },
+            FolderInfo {
+                id: 11,
+                account_id: 1,
+                display_name: "☺ Projects/2026".into(),
+                is_jmap: false,
+                imap_name: "&Jjo- Projects/2026".into(),
+                delimiter: Some("/".into()),
+                role: None,
+            },
+            FolderInfo {
+                id: 12,
+                account_id: 1,
+                display_name: "Archive copy/2026".into(),
+                is_jmap: false,
+                imap_name: "Archive copy/2026".into(),
+                delimiter: Some("/".into()),
+                role: None,
+            },
+            FolderInfo {
+                id: 13,
+                account_id: 1,
+                display_name: "Inbox".into(),
+                is_jmap: false,
+                imap_name: "Inbox".into(),
+                delimiter: Some("/".into()),
+                role: None,
+            },
+        ];
+
+        let entries = mailbox_entries(&[test_account()], &folders);
+        let parent = entries.iter().find(|entry| entry.folder_id == 10).unwrap();
+        let child = entries.iter().find(|entry| entry.folder_id == 11).unwrap();
+        let duplicate_leaf = entries.iter().find(|entry| entry.folder_id == 12).unwrap();
+        let custom_inbox = entries.iter().find(|entry| entry.folder_id == 13).unwrap();
+        assert_eq!(parent.label, "☺ Projects");
+        assert!(parent.has_children);
+        assert_eq!(child.label, "2026");
+        assert_eq!(child.parent_folder_id, parent.folder_id);
+        assert_eq!(child.depth, 1);
+        assert_eq!(child.scope, "Folder:11");
+        assert_eq!(duplicate_leaf.scope, "Folder:12");
+        assert_eq!(custom_inbox.scope, "Folder:13");
+    }
+
+    #[test]
+    fn category_and_label_scopes_keep_their_core_filters() {
+        let labels = vec![
+            Label {
+                id: 31,
+                name: "Projects".into(),
+                color: "#16a765".into(),
+                keyword: "Projects".into(),
+                position: 0,
+                is_auto: false,
+            },
+            Label {
+                id: 32,
+                name: "Newsletters".into(),
+                color: "#a479e2".into(),
+                keyword: "newsletters".into(),
+                position: 1,
+                is_auto: true,
+            },
+        ];
+
+        let important = resolve_scope("Important", &[], &[], &labels);
+        assert_eq!(important.view, View::Inbox);
+        assert_eq!(important.split_id, Some(-1));
+
+        let manual = resolve_scope("Label:31", &[], &[], &labels);
+        assert_eq!(manual.view, View::All);
+        assert_eq!(manual.label_id, Some(31));
+        assert_eq!(manual.title, "Projects");
+
+        let automatic = resolve_scope("Label:32", &[], &[], &labels);
+        assert_eq!(automatic.view, View::Inbox);
+        assert_eq!(automatic.label_id, Some(32));
+        assert_eq!(automatic.title, "Newsletters");
+        assert_eq!(
+            validated_startup_scope("Label:32", &[], &[], &labels),
+            "Label:32"
+        );
+        assert_eq!(
+            validated_startup_scope("Label:999", &[], &[], &labels),
+            "Unified Inbox"
         );
     }
 }

@@ -16,12 +16,15 @@ export component MailView inherits Rectangle {
     in property <[MailboxRow]> account_mailboxes: [];
     in property <[MailboxRow]> unified_mailboxes: [];
     in property <[MailLabelRow]> mail_labels: [];
+    in property <[MailLabelRow]> sidebar_mail_categories: [];
+    in property <[MailLabelRow]> sidebar_mail_labels: [];
     in property <[MailLabelRow]> mail_label_results: [];
     in property <int> selected_mail_label_count: 0;
     in property <[EmailTile]> email_tiles: [];
     in property <[EmailLink]> email_links: [];
     in property <string> active_view: "mail";
     in property <string> selected_scope: "Unified Inbox";
+    in property <string> selected_scope_title: "Unified Inbox";
     in property <string> unified_count: "";
     in property <string> total_count: "";
     in property <string> search_query: "";
@@ -91,6 +94,12 @@ export component MailView inherits Rectangle {
     callback search_changed(string);
     callback set_search_filter(string);
     callback select_scope(string);
+    callback toggle_folder(int, bool);
+    callback request_folder_create(int, int, string);
+    callback request_folder_rename(int, string);
+    callback request_folder_delete(int, string);
+    callback request_label_rename(int, string, color);
+    callback request_label_delete(int, string);
     callback load_more();
     callback sync_mail();
     callback message_action(string);
@@ -136,6 +145,8 @@ export component MailView inherits Rectangle {
                 mailboxes: root.mailboxes;
                 account-mailboxes: root.account_mailboxes;
                 unified-mailboxes: root.unified_mailboxes;
+                mail-categories: root.sidebar_mail_categories;
+                mail-labels: root.sidebar_mail_labels;
                 unified-count: root.unified_count;
                 selected-scope: root.selected_scope;
                 monochrome-icons: root.monochrome_sidebar_icons;
@@ -148,6 +159,12 @@ export component MailView inherits Rectangle {
                 body-color: root.body-text;
                 muted-color: root.muted-text;
                 select-scope(scope) => { root.select_scope(scope); }
+                toggle-folder(id, expanded) => { root.toggle_folder(id, expanded); }
+                request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
+                request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
+                request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
+                request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
+                request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => { root.open_compose(); }
                 manage-accounts => {
                     root.settings_tab = "Accounts";
@@ -160,6 +177,7 @@ export component MailView inherits Rectangle {
                 loading: root.loading;
                 emails: root.emails;
                 selected_scope: root.selected_scope;
+                scope_title: root.selected_scope_title;
                 total_count: root.total_count;
                 search_query: root.search_query;
                 search_filter: root.search_filter;
@@ -303,6 +321,8 @@ export component MailView inherits Rectangle {
                 mailboxes: root.mailboxes;
                 account-mailboxes: root.account_mailboxes;
                 unified-mailboxes: root.unified_mailboxes;
+                mail-categories: root.sidebar_mail_categories;
+                mail-labels: root.sidebar_mail_labels;
                 unified-count: root.unified_count;
                 selected-scope: root.selected_scope;
                 monochrome-icons: root.monochrome_sidebar_icons;
@@ -318,6 +338,12 @@ export component MailView inherits Rectangle {
                     root.select_scope(scope);
                     root.compact-page = "list";
                 }
+                toggle-folder(id, expanded) => { root.toggle_folder(id, expanded); }
+                request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
+                request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
+                request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
+                request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
+                request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => { root.open_compose(); }
                 manage-accounts => {
                     root.settings_tab = "Accounts";
@@ -347,6 +373,7 @@ export component MailView inherits Rectangle {
                 dense: !root.compact;
                 emails: root.emails;
                 selected_scope: root.selected_scope;
+                scope_title: root.selected_scope_title;
                 total_count: root.total_count;
                 search_query: root.search_query;
                 search_filter: root.search_filter;
@@ -497,6 +524,8 @@ export component MailView inherits Rectangle {
                 mailboxes: root.mailboxes;
                 account-mailboxes: root.account_mailboxes;
                 unified-mailboxes: root.unified_mailboxes;
+                mail-categories: root.sidebar_mail_categories;
+                mail-labels: root.sidebar_mail_labels;
                 unified-count: root.unified_count;
                 selected-scope: root.selected_scope;
                 monochrome-icons: root.monochrome_sidebar_icons;
@@ -513,6 +542,12 @@ export component MailView inherits Rectangle {
                     root.folders-open = false;
                     root.compact-page = "list";
                 }
+                toggle-folder(id, expanded) => { root.toggle_folder(id, expanded); }
+                request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
+                request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
+                request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
+                request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
+                request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => {
                     root.folders-open = false;
                     root.open_compose();

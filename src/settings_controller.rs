@@ -6,6 +6,7 @@
 //! from accumulating one closure per setting.
 
 use super::*;
+use flectar_mail_core::models::CustomTheme;
 
 pub(super) fn register_settings_preference_callbacks(
     app: &AppWindow,
@@ -113,6 +114,77 @@ pub(super) fn register_settings_preference_callbacks(
             }
         }
     });
+
+    let app_weak = app.as_weak();
+    let state_for_theme_preset = Rc::clone(state);
+    let runtime_for_theme_preset = Rc::clone(runtime);
+    app.on_save_theme_preset(move |preset| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_theme_preset.borrow().core.clone() else {
+            app.set_sync_status(UiMessage::plain("Theme palette updated for this session."));
+            return;
+        };
+        match runtime_for_theme_preset.block_on(core.set_theme_preset(preset.as_str())) {
+            Ok(()) => app.set_sync_status(UiMessage::plain("Theme palette saved.")),
+            Err(error) => app.set_sync_status(UiMessage::detail(
+                "Could not save theme palette: {}",
+                error,
+            )),
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_custom_theme = Rc::clone(state);
+    let runtime_for_custom_theme = Rc::clone(runtime);
+    app.on_save_custom_theme(
+        move |light_primary,
+              light_page,
+              light_surface,
+              light_text,
+              light_border,
+              dark_primary,
+              dark_page,
+              dark_surface,
+              dark_text,
+              dark_border| {
+            let Some(app) = app_weak.upgrade() else {
+                return false;
+            };
+            let custom_theme = CustomTheme {
+                light_primary: theme::color_to_hex(light_primary),
+                light_page_background: theme::color_to_hex(light_page),
+                light_surface: theme::color_to_hex(light_surface),
+                light_text: theme::color_to_hex(light_text),
+                light_border: theme::color_to_hex(light_border),
+                dark_primary: theme::color_to_hex(dark_primary),
+                dark_page_background: theme::color_to_hex(dark_page),
+                dark_surface: theme::color_to_hex(dark_surface),
+                dark_text: theme::color_to_hex(dark_text),
+                dark_border: theme::color_to_hex(dark_border),
+            };
+            let Some(core) = state_for_custom_theme.borrow().core.clone() else {
+                app.set_sync_status(UiMessage::plain(
+                    "Custom theme updated for this session.",
+                ));
+                return false;
+            };
+            match runtime_for_custom_theme.block_on(core.set_custom_theme(custom_theme)) {
+                Ok(()) => {
+                    app.set_sync_status(UiMessage::plain("Custom theme saved."));
+                    true
+                }
+                Err(error) => {
+                    app.set_sync_status(UiMessage::detail(
+                        "Could not save custom theme: {}",
+                        error,
+                    ));
+                    false
+                }
+            }
+        },
+    );
 
     let app_weak = app.as_weak();
     let state_for_language = Rc::clone(state);

@@ -727,6 +727,10 @@ pub struct SplitRule {
 pub struct FolderInfo {
     pub id: i64,
     pub account_id: i64,
+    /// Unicode name suitable for display. `imap_name` remains the exact remote
+    /// identifier used in SELECT and other protocol commands.
+    pub display_name: String,
+    pub is_jmap: bool,
     pub imap_name: String,
     /// IMAP hierarchy delimiter (e.g. "/" or "."), for nesting user folders.
     pub delimiter: Option<String>,
@@ -932,10 +936,50 @@ pub struct AiAutomationPlan {
     pub issues: Vec<String>,
 }
 
+/// User-selected foundation colors for both OS color schemes. Strings keep
+/// this persistence model independent from the UI toolkit and make exported
+/// settings human-readable. The desktop shell validates them before use.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CustomTheme {
+    pub light_primary: String,
+    pub light_page_background: String,
+    pub light_surface: String,
+    pub light_text: String,
+    pub light_border: String,
+    pub dark_primary: String,
+    pub dark_page_background: String,
+    pub dark_surface: String,
+    pub dark_text: String,
+    pub dark_border: String,
+}
+
+impl Default for CustomTheme {
+    fn default() -> Self {
+        Self {
+            light_primary: "#0969DA".into(),
+            light_page_background: "#F2F2F0".into(),
+            light_surface: "#FFFFFF".into(),
+            light_text: "#202120".into(),
+            light_border: "#D9D9D6".into(),
+            dark_primary: "#0969DA".into(),
+            dark_page_background: "#111213".into(),
+            dark_surface: "#18191A".into(),
+            dark_text: "#F3F3F2".into(),
+            dark_border: "#3A3B3C".into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub theme: String,
+    /// Named application palette: "default" | "teal" | "green" | "purple" | "custom".
+    #[serde(default = "default_theme_preset")]
+    pub theme_preset: String,
+    #[serde(default)]
+    pub custom_theme: CustomTheme,
     /// Show sender identity images in the mail list and reading pane.
     /// Existing settings blobs predate this option, so avatars remain visible
     /// unless the user explicitly turns them off.
@@ -1171,11 +1215,16 @@ fn default_notification_scope() -> String {
 fn default_workspace_layout() -> String {
     "default".into()
 }
+fn default_theme_preset() -> String {
+    "default".into()
+}
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             theme: "system".into(),
+            theme_preset: default_theme_preset(),
+            custom_theme: CustomTheme::default(),
             show_avatars: true,
             workspace_layout: default_workspace_layout(),
             monochrome_sidebar_icons: false,

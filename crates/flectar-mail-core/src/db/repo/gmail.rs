@@ -133,6 +133,21 @@ pub fn provider_label_for_local(
         .optional()?)
 }
 
+pub fn provider_label_for_folder(
+    conn: &Connection,
+    account_id: i64,
+    folder_id: i64,
+) -> Result<Option<String>> {
+    Ok(conn
+        .query_row(
+            "SELECT provider_id FROM gmail_labels
+             WHERE account_id = ?1 AND folder_id = ?2 AND kind = 'user' LIMIT 1",
+            params![account_id, folder_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 pub fn set_draft_ids(
     conn: &Connection,
     account_id: i64,

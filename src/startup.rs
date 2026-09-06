@@ -1,13 +1,14 @@
 //! Background startup snapshot and coalesced core-event ingestion.
 
 use crate::{
-    AppWindow, PAGE_SIZE,
+    AppTheme, AppWindow, PAGE_SIZE,
     calendar::{
         LocalCalendarAccount, LocalCalendarEvent, LocalCalendarSource, calendar_accounts,
         calendar_range_millis, calendar_sources, core_calendar_event,
     },
     mail::{self, CoreMailSource},
     startup_metrics::StartupMetrics,
+    theme::stored_color,
     ui_dispatch::UiWake,
 };
 use chrono::Local;
@@ -17,6 +18,7 @@ use flectar_mail_core::{
     models::{Account, AccountConfig, CalendarConnection, Settings, ThreadCursor},
 };
 use serde::{Deserialize, Serialize};
+use slint::ComponentHandle;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -34,6 +36,8 @@ const MAX_WARM_START_MAILBOXES: usize = 512;
 pub(crate) struct WarmStartMessage {
     pub(crate) id: i32,
     pub(crate) thread_id: Option<i64>,
+    #[serde(default = "missing_folder_id")]
+    pub(crate) account_id: i64,
     pub(crate) account: String,
     pub(crate) folder: String,
     pub(crate) sender: String,
@@ -57,6 +61,7 @@ impl From<&mail::MailMessage> for WarmStartMessage {
         Self {
             id: message.id,
             thread_id: message.thread_id,
+            account_id: message.account_id,
             account: message.account.clone(),
             folder: message.folder.clone(),
             sender: message.sender.clone(),
@@ -81,6 +86,7 @@ impl From<WarmStartMessage> for mail::MailMessage {
         Self {
             id: message.id,
             thread_id: message.thread_id,
+            account_id: message.account_id,
             account: message.account,
             folder: message.folder,
             sender: message.sender,
@@ -106,6 +112,16 @@ impl From<WarmStartMessage> for mail::MailMessage {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct WarmStartMailbox {
     pub(crate) account_id: i64,
+    #[serde(default = "missing_folder_id")]
+    pub(crate) folder_id: i64,
+    #[serde(default = "missing_folder_id")]
+    pub(crate) parent_folder_id: i64,
+    #[serde(default)]
+    pub(crate) depth: usize,
+    #[serde(default)]
+    pub(crate) has_children: bool,
+    #[serde(default)]
+    pub(crate) is_standard: bool,
     pub(crate) label: String,
     pub(crate) scope: String,
     pub(crate) context: String,
@@ -115,10 +131,19 @@ pub(crate) struct WarmStartMailbox {
     pub(crate) count: String,
 }
 
+fn missing_folder_id() -> i64 {
+    -1
+}
+
 impl From<&mail::MailboxEntry> for WarmStartMailbox {
     fn from(mailbox: &mail::MailboxEntry) -> Self {
         Self {
             account_id: mailbox.account_id,
+            folder_id: mailbox.folder_id,
+            parent_folder_id: mailbox.parent_folder_id,
+            depth: mailbox.depth,
+            has_children: mailbox.has_children,
+            is_standard: mailbox.is_standard,
             label: mailbox.label.clone(),
             scope: mailbox.scope.clone(),
             context: mailbox.context.clone(),
@@ -134,6 +159,11 @@ impl From<WarmStartMailbox> for mail::MailboxEntry {
     fn from(mailbox: WarmStartMailbox) -> Self {
         Self {
             account_id: mailbox.account_id,
+            folder_id: mailbox.folder_id,
+            parent_folder_id: mailbox.parent_folder_id,
+            depth: mailbox.depth,
+            has_children: mailbox.has_children,
+            is_standard: mailbox.is_standard,
             label: mailbox.label,
             scope: mailbox.scope,
             context: mailbox.context,
@@ -254,7 +284,8 @@ impl WarmStartCacheWriter {
     }
 
     pub(crate) fn save(&self, snapshot: WarmStartSnapshot) {
-        self.tx.send_replace(Some(WarmStartCacheCommand::Save(Arc::new(snapshot))));
+        self.tx
+            .send_replace(Some(WarmStartCacheCommand::Save(Arc::new(snapshot))));
     }
 
     pub(crate) fn clear(&self) {
@@ -554,6 +585,26 @@ pub(crate) fn apply_settings(app: &AppWindow, settings: &Settings) {
         }
         .into(),
     );
+
+    let theme = app.global::<AppTheme>();
+    theme.set_preset(
+        match settings.theme_preset.as_str() {
+            "teal" | "green" | "purple" | "custom" => settings.theme_preset.as_str(),
+            _ => "default",
+        }
+        .into(),
+    );
+    let custom = &settings.custom_theme;
+    theme.set_custom_light_primary(stored_color(&custom.light_primary, "#0969DA"));
+    theme.set_custom_light_page_bg(stored_color(&custom.light_page_background, "#F2F2F0"));
+    theme.set_custom_light_surface(stored_color(&custom.light_surface, "#FFFFFF"));
+    theme.set_custom_light_text(stored_color(&custom.light_text, "#202120"));
+    theme.set_custom_light_border(stored_color(&custom.light_border, "#D9D9D6"));
+    theme.set_custom_dark_primary(stored_color(&custom.dark_primary, "#0969DA"));
+    theme.set_custom_dark_page_bg(stored_color(&custom.dark_page_background, "#111213"));
+    theme.set_custom_dark_surface(stored_color(&custom.dark_surface, "#18191A"));
+    theme.set_custom_dark_text(stored_color(&custom.dark_text, "#F3F3F2"));
+    theme.set_custom_dark_border(stored_color(&custom.dark_border, "#3A3B3C"));
 }
 
 #[cfg(test)]
@@ -579,6 +630,7 @@ mod warm_start_tests {
         mail::MailMessage {
             id: 9,
             thread_id: Some(19),
+            account_id: 7,
             account: "Person".into(),
             folder: "Inbox".into(),
             sender: "Sender".into(),
@@ -603,6 +655,11 @@ mod warm_start_tests {
     fn mailbox() -> mail::MailboxEntry {
         mail::MailboxEntry {
             account_id: 7,
+            folder_id: 1,
+            parent_folder_id: -1,
+            depth: 0,
+            has_children: false,
+            is_standard: true,
             label: "Inbox".into(),
             scope: "Person / Inbox".into(),
             context: "Person".into(),

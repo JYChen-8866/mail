@@ -19,6 +19,11 @@ pub(super) fn fixture_mailboxes(messages: &[MailMessage]) -> Vec<MailboxEntry> {
     for account in accounts {
         entries.push(MailboxEntry {
             account_id: 0,
+            folder_id: -1,
+            parent_folder_id: -1,
+            depth: 0,
+            has_children: false,
+            is_standard: false,
             label: account.clone(),
             scope: account.clone(),
             context: account.clone(),
@@ -35,6 +40,11 @@ pub(super) fn fixture_mailboxes(messages: &[MailMessage]) -> Vec<MailboxEntry> {
         for label in STANDARD_FOLDERS {
             entries.push(MailboxEntry {
                 account_id: 0,
+                folder_id: -1,
+                parent_folder_id: -1,
+                depth: 0,
+                has_children: false,
+                is_standard: true,
                 label: label.to_owned(),
                 scope: format!("{account} / {label}"),
                 context: account.clone(),
@@ -68,6 +78,11 @@ pub(super) fn fixture_mailboxes(messages: &[MailMessage]) -> Vec<MailboxEntry> {
         for folder in custom_folders {
             entries.push(MailboxEntry {
                 account_id: 0,
+                folder_id: -1,
+                parent_folder_id: -1,
+                depth: 0,
+                has_children: false,
+                is_standard: false,
                 label: folder.clone(),
                 scope: format!("{account} / {folder}"),
                 context: account.clone(),

@@ -96,10 +96,12 @@ slint = { version = "1.17", default-features = false, features = [
     "std",
     "renderer-software",
     "system-tray",
+    "unstable-fontique-010",
     "compat-1-2",
 ] }
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "fs"] }
 tracing.workspace = true
+unicode-properties = { version = "0.1", default-features = false, features = ["emoji"] }
 url = "2"
 webbrowser = "1.2"
 

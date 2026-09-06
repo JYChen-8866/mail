@@ -7,21 +7,25 @@ export component LineEdit inherits Rectangle {
     in property <InputType> input-type: InputType.text;
     in property <bool> enabled: true;
     in property <bool> read-only: false;
+    in property <bool> invalid: false;
     in property <bool> show-leading-icon: false;
     in property <image> leading-icon;
     in property <color> leading-icon-color: AppTheme.secondary;
     in property <length> trailing-content-width: 0px;
     private property <length> text-inset: root.show-leading-icon ? 40px : 12px;
     callback edited(string);
+    callback accepted(string);
     callback select-all;
     callback copy;
+    out property <bool> has-focus: editor.has-focus;
     forward-focus: editor;
 
     height: 36px;
     min-width: 80px;
     border-radius: LayoutMetrics.corner-radius - 2px;
     border-width: 1px;
-    border-color: editor.has-focus ? AppTheme.accent : AppTheme.input-border;
+    border-color: root.invalid ? AppTheme.destructive
+        : editor.has-focus ? AppTheme.accent : AppTheme.input-border;
     background: AppTheme.input-bg;
     opacity: root.enabled ? 1 : 0.5;
 
@@ -55,6 +59,7 @@ export component LineEdit inherits Rectangle {
             root.text = self.text;
             root.edited(self.text);
         }
+        accepted => { root.accepted(self.text); }
     }
 
     if root.show-leading-icon : Image {
