@@ -1012,6 +1012,50 @@ pub fn prepare_email_html(html: &str) -> Result<PreparedEmail, String> {
     prepare_email_html_with_provider(html, None)
 }
 
+/// Build the Parley `FontContext` used for email bodies.
+///
+/// On macOS, fontique maps the "sans-serif" generic family to "Helvetica".
+/// But macOS's own `Helvetica.ttc` (distinct from `HelveticaNeue.ttc`)
+/// digitizes "|" sitting flush on the baseline instead of dipping below it
+/// like every other tested family — confirmed directly against CoreText, so
+/// it's a property of that font file, not a bug in our stack. It renders
+/// squashed, reading as "l". Prefer "Helvetica Neue" for the generic family
+/// when it's installed: same type family, unaffected glyph.
+///
+/// The `FontContext`/`Collection`/`BULLET_FONT` bootstrap below mirrors the
+/// default-construction branch in `BaseDocument::new`
+/// (`crates/blitz-dom/src/document.rs`, the `unwrap_or_else` when
+/// `DocumentConfig.font_ctx` is `None`) — that crate is a vendored fork
+/// wholesale-replaced on updates, so the logic can't be shared by extracting
+/// a helper there. Keep the two in sync by hand if either changes.
+fn build_email_font_ctx() -> parley::FontContext {
+    use parley::fontique::{Blob, Collection, CollectionOptions, GenericFamily, SourceCache};
+
+    let mut font_ctx = parley::FontContext {
+        source_cache: SourceCache::new_shared(),
+        collection: Collection::new(CollectionOptions {
+            shared: false,
+            system_fonts: !cfg!(target_arch = "wasm32"),
+        }),
+    };
+    font_ctx
+        .collection
+        .register_fonts(Blob::new(Arc::new(blitz_dom::BULLET_FONT) as _), None);
+
+    if let Some(helvetica_neue) = font_ctx.collection.family_id("Helvetica Neue") {
+        let existing: Vec<_> = font_ctx
+            .collection
+            .generic_families(GenericFamily::SansSerif)
+            .collect();
+        font_ctx.collection.set_generic_families(
+            GenericFamily::SansSerif,
+            std::iter::once(helvetica_neue).chain(existing),
+        );
+    }
+
+    font_ctx
+}
+
 fn prepare_email_html_with_provider(
     html: &str,
     net_provider: Option<Arc<dyn NetProvider>>,
@@ -1027,6 +1071,7 @@ fn prepare_email_html_with_provider(
                 ColorScheme::Light,
             )),
             net_provider,
+            font_ctx: Some(build_email_font_ctx()),
             ..Default::default()
         },
     );
@@ -1224,6 +1269,22 @@ mod tests {
         prepare_email_html, render_prepared_cpu, render_to_buffer,
     };
     use crate::mail::fixtures;
+
+    #[test]
+    fn email_font_ctx_prefers_helvetica_neue_for_sans_serif_when_installed() {
+        use parley::fontique::GenericFamily;
+
+        let mut font_ctx = super::build_email_font_ctx();
+        let Some(helvetica_neue) = font_ctx.collection.family_id("Helvetica Neue") else {
+            // Host has no Helvetica Neue installed (e.g. a minimal CI image); nothing to assert.
+            return;
+        };
+        let first = font_ctx
+            .collection
+            .generic_families(GenericFamily::SansSerif)
+            .next();
+        assert_eq!(first, Some(helvetica_neue));
+    }
 
     #[test]
     fn fixture_messages_prepare_as_retained_blitz_documents() {
