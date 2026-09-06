@@ -5,7 +5,6 @@
   "selected_scope": "Unified Inbox",
   "unified_count": "14",
   "total_count": "25 messages",
-  "list_status": "14 unread · Updated just now",
   "has_selected": true,
   "text_mode": false,
   "email-content-aspect": 1,
@@ -24,21 +23,21 @@
   "selected_label": "REPORTS",
   "selected_mail_label_count": 2,
   "mail_labels": [
-    { "id": 1, "name": "Reports", "color": "#4a86e8", "applied": true, "is_auto": false },
-    { "id": 2, "name": "Marketing", "color": "#e0708a", "applied": true, "is_auto": true },
-    { "id": 3, "name": "Follow up", "color": "#8b5cf6", "applied": false, "is_auto": false }
+    { "id": 1, "name": "Reports", "name_has_emoji": false, "color": "#4a86e8", "applied": true, "is_auto": false },
+    { "id": 2, "name": "Marketing", "name_has_emoji": false, "color": "#e0708a", "applied": true, "is_auto": true },
+    { "id": 3, "name": "Follow up", "name_has_emoji": false, "color": "#8b5cf6", "applied": false, "is_auto": false }
   ],
   "sidebar_mail_categories": [
-    { "id": 2, "name": "Marketing", "color": "#e0708a", "applied": true, "is_auto": true }
+    { "id": 2, "name": "Marketing", "name_has_emoji": false, "color": "#e0708a", "applied": true, "is_auto": true }
   ],
   "sidebar_mail_labels": [
-    { "id": 1, "name": "Reports", "color": "#4a86e8", "applied": true, "is_auto": false },
-    { "id": 3, "name": "Follow up", "color": "#8b5cf6", "applied": false, "is_auto": false }
+    { "id": 1, "name": "Reports", "name_has_emoji": false, "color": "#4a86e8", "applied": true, "is_auto": false },
+    { "id": 3, "name": "Follow up", "name_has_emoji": false, "color": "#8b5cf6", "applied": false, "is_auto": false }
   ],
   "mail_label_results": [
-    { "id": 1, "name": "Reports", "color": "#4a86e8", "applied": true, "is_auto": false },
-    { "id": 2, "name": "Marketing", "color": "#e0708a", "applied": true, "is_auto": true },
-    { "id": 3, "name": "Follow up", "color": "#8b5cf6", "applied": false, "is_auto": false }
+    { "id": 1, "name": "Reports", "name_has_emoji": false, "color": "#4a86e8", "applied": true, "is_auto": false },
+    { "id": 2, "name": "Marketing", "name_has_emoji": false, "color": "#e0708a", "applied": true, "is_auto": true },
+    { "id": 3, "name": "Follow up", "name_has_emoji": false, "color": "#8b5cf6", "applied": false, "is_auto": false }
   ],
   "calendar_month_title": "September 2026",
   "calendar_period_title": "Sep 7 – 13, 2026",
@@ -236,8 +235,8 @@
       "has_attachments": true,
       "label_summary": "Reports · Marketing",
       "labels": [
-        { "id": 1, "name": "Reports", "color": "#4a86e8", "applied": true, "is_auto": false },
-        { "id": 2, "name": "Marketing", "color": "#e0708a", "applied": true, "is_auto": true }
+        { "id": 1, "name": "Reports", "name_has_emoji": false, "color": "#4a86e8", "applied": true, "is_auto": false },
+        { "id": 2, "name": "Marketing", "name_has_emoji": false, "color": "#e0708a", "applied": true, "is_auto": true }
       ],
       "selected": true
     },
