@@ -1024,6 +1024,14 @@ pub(super) fn schedule_profile_avatar_fetches(
     }
 }
 
+fn label_has_emoji(label: &str) -> bool {
+    use unicode_properties::UnicodeEmoji as _;
+
+    label
+        .chars()
+        .any(|character| character.is_emoji_char() && !character.is_ascii())
+}
+
 pub(super) fn make_mailbox_rows(
     mailboxes: &[MailboxEntry],
     avatars: &HashMap<i64, ProfileAvatarImages>,
@@ -1068,6 +1076,7 @@ pub(super) fn make_mailbox_rows(
                 has_children: mailbox.has_children,
                 expanded: !collapsed_folder_ids.contains(&mailbox.folder_id),
                 is_standard: mailbox.is_standard,
+                label_has_emoji: label_has_emoji(&mailbox.label),
                 label: mailbox.label.clone().into(),
                 scope: mailbox.scope.clone().into(),
                 context: mailbox.context.clone().into(),
@@ -1359,6 +1368,14 @@ mod tests {
             vec![10, 20]
         );
         assert!(!rows[0].expanded);
+    }
+
+    #[test]
+    fn sidebar_folder_detects_emoji_labels() {
+        assert!(label_has_emoji("🚗🚗"));
+        assert!(label_has_emoji("Cars 🚗"));
+        assert!(!label_has_emoji("Cars"));
+        assert!(!label_has_emoji("Folder 1"));
     }
 
     #[test]

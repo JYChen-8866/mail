@@ -62,7 +62,8 @@ render() {
         | .depth = (.depth // 0)
         | .has_children = (.has_children // false)
         | .expanded = (.expanded // true)
-        | .is_standard = (.is_standard // true);
+        | .is_standard = (.is_standard // true)
+        | .label_has_emoji = (.label_has_emoji // false);
       def favicon_path(address):
         ($favicon_dir + "/" + (address | split("@") | last | ascii_downcase) + ".png");
       .mailboxes |= map(complete_mailbox)

@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: flectar-mail 0.1.0\n"
-"POT-Creation-Date: 2026-09-06 15:08+0000\n"
+"POT-Creation-Date: 2026-09-06 15:34+0000\n"
 "PO-Revision-Date: 2026-08-31 02:35+0000\n"
 "Last-Translator: Flectar contributors\n"
 "Language-Team: Spanish\n"
@@ -1506,75 +1506,75 @@ msgstr "Ajustes"
 msgid "Primary navigation"
 msgstr "Navegación principal"
 
-#: ui/components/sidebar.slint:159
+#: ui/components/sidebar.slint:162
 msgid "Collapse folder"
 msgstr "Contraer carpeta"
 
-#: ui/components/sidebar.slint:159
+#: ui/components/sidebar.slint:162
 msgid "Expand folder"
 msgstr "Expandir carpeta"
 
-#: ui/components/sidebar.slint:174
+#: ui/components/sidebar.slint:177
 msgid "New subfolder"
 msgstr "Nueva subcarpeta"
 
-#: ui/components/sidebar.slint:178 ui/dialogs/folder-dialog.slint:27
+#: ui/components/sidebar.slint:181 ui/dialogs/folder-dialog.slint:27
 msgid "Rename folder"
 msgstr "Renombrar carpeta"
 
-#: ui/components/sidebar.slint:182
+#: ui/components/sidebar.slint:185
 msgid "Delete folder"
 msgstr "Eliminar carpeta"
 
-#: ui/components/sidebar.slint:194 ui/dialogs/folder-dialog.slint:26
+#: ui/components/sidebar.slint:197 ui/dialogs/folder-dialog.slint:26
 msgid "Rename label"
 msgstr "Renombrar etiqueta"
 
-#: ui/components/sidebar.slint:198
+#: ui/components/sidebar.slint:201
 msgid "Delete label"
 msgstr "Eliminar etiqueta"
 
-#: ui/components/sidebar.slint:380 ui/views/mail-list-pane.slint:556
+#: ui/components/sidebar.slint:384 ui/views/mail-list-pane.slint:556
 msgid "New email"
 msgstr "Nuevo correo"
 
-#: ui/components/sidebar.slint:402 ui/views/contacts-view.slint:226
+#: ui/components/sidebar.slint:406 ui/views/contacts-view.slint:226
 msgid "UNIFIED"
 msgstr "UNIFICADO"
 
-#: ui/components/sidebar.slint:407
+#: ui/components/sidebar.slint:411
 msgid "All Inboxes"
 msgstr "Todas las bandejas"
 
-#: ui/components/sidebar.slint:423
+#: ui/components/sidebar.slint:427
 msgid "Inbox"
 msgstr "Bandeja de entrada"
 
-#: ui/components/sidebar.slint:477
+#: ui/components/sidebar.slint:479
 msgid "Categories"
 msgstr "Categorías"
 
-#: ui/components/sidebar.slint:495
+#: ui/components/sidebar.slint:498
 msgid "Important"
 msgstr "Importante"
 
-#: ui/components/sidebar.slint:510
+#: ui/components/sidebar.slint:514
 msgid "Other"
 msgstr "Otros"
 
-#: ui/components/sidebar.slint:551 ui/views/mail-reading-pane.slint:346
+#: ui/components/sidebar.slint:557 ui/views/mail-reading-pane.slint:346
 msgid "Labels"
 msgstr "Etiquetas"
 
-#: ui/components/sidebar.slint:597 ui/views/contacts-view.slint:276
+#: ui/components/sidebar.slint:606 ui/views/contacts-view.slint:276
 msgid "ACCOUNTS"
 msgstr "CUENTAS"
 
-#: ui/components/sidebar.slint:694 ui/dialogs/folder-dialog.slint:25
+#: ui/components/sidebar.slint:704 ui/dialogs/folder-dialog.slint:25
 msgid "New folder"
 msgstr "Nueva carpeta"
 
-#: ui/components/sidebar.slint:716 ui/components/sidebar.slint:735
+#: ui/components/sidebar.slint:726 ui/components/sidebar.slint:745
 msgid "Add account"
 msgstr "Añadir cuenta"
 

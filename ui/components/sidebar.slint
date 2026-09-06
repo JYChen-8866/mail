@@ -5,6 +5,7 @@ import { Button } from "button.slint";
 import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading } from "workspace-layout.slint";
 import { LayoutMetrics } from "../design-system.slint";
 import { TypeScale } from "../typography.slint";
+import "../../resources/fonts/noto-emoji/NotoEmoji[wght].ttf";
 
 component SidebarIcon {
     in property <image> icon;
@@ -62,6 +63,7 @@ export component SidebarItem inherits Rectangle {
     in property <image> icon;
     in property <bool> selected: false;
     in property <bool> prominent: false;
+    in property <bool> label-has-emoji: false;
     in property <length> row-height: 28px;
     in property <length> left-padding: 26px;
     in property <int> account-id: -1;
@@ -127,6 +129,7 @@ export component SidebarItem inherits Rectangle {
         color: root.selected ? root.accent-color : root.body-color;
         font-size: root.prominent ? TypeScale.body : TypeScale.secondary;
         font-weight: root.selected ? 700 : 500;
+        font-family: root.label-has-emoji ? "Noto Emoji" : "";
         vertical-alignment: center;
         overflow: elide;
     }
@@ -252,6 +255,7 @@ export component SidebarSectionHeader inherits Rectangle {
     in property <color> muted-color;
     in property <color> icon-color;
     in property <int> label-font-weight: 600;
+    in property <length> left-padding: 4px;
     callback toggled(bool);
 
     height: root.detail == "" ? 32px : 42px;
@@ -259,7 +263,7 @@ export component SidebarSectionHeader inherits Rectangle {
     background: header-hit.has-hover ? root.hover-background : root.sidebar-background;
 
     Image {
-        x: 4px;
+        x: root.left-padding;
         y: (parent.height - self.height) / 2;
         width: 12px;
         height: 12px;
@@ -272,7 +276,7 @@ export component SidebarSectionHeader inherits Rectangle {
     }
 
     if root.has-avatar : Avatar {
-        x: 22px;
+        x: root.left-padding + 18px;
         y: (parent.height - self.height) / 2;
         size: 22px;
         source: root.avatar-image;
@@ -283,7 +287,7 @@ export component SidebarSectionHeader inherits Rectangle {
     }
 
     if !root.has-avatar : SidebarIcon {
-        x: 22px;
+        x: root.left-padding + 18px;
         y: (parent.height - self.height) / 2;
         height: 22px;
         icon: root.icon;
@@ -291,7 +295,7 @@ export component SidebarSectionHeader inherits Rectangle {
     }
 
     Text {
-        x: 52px;
+        x: root.left-padding + 48px;
         y: root.detail == "" ? 0px : 4px;
         width: parent.width - self.x - 8px;
         height: root.detail == "" ? parent.height : 20px;
@@ -471,12 +475,11 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             : #d946ef;
                         clicked(scope) => { root.select-scope(scope); }
                     }
-                }
-
                 categories-section := SidebarSectionHeader {
                     label: @tr("Categories");
                     open: false;
                     label-font-weight: 500;
+                    left-padding: 20px;
                     sidebar-background: root.background-color;
                     hover-background: root.hover-background;
                     body-color: root.title-color;
@@ -493,6 +496,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
 
                     SidebarItem {
                         label: @tr("Important");
+                        left-padding: 58px;
                         scope: "Important";
                         mail-drop-enabled: true;
                         icon: @image-url("../icons/phosphor/envelope-fill.svg");
@@ -508,6 +512,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
 
                     SidebarItem {
                         label: @tr("Other");
+                        left-padding: 58px;
                         scope: "Other";
                         mail-drop-enabled: true;
                         icon: @image-url("../icons/phosphor/envelope-simple-fill.svg");
@@ -523,6 +528,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
 
                     for category in root.mail-categories : SidebarItem {
                         label: category.name;
+                        left-padding: 58px;
                         scope: "Label:" + category.id;
                         mail-drop-enabled: true;
                         icon: root.selected-scope == "Label:" + category.id
@@ -551,6 +557,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         label: @tr("Labels");
                         open: false;
                         label-font-weight: 500;
+                        left-padding: 20px;
                         sidebar-background: root.background-color;
                         hover-background: root.hover-background;
                         body-color: root.title-color;
@@ -567,6 +574,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
 
                         for label in root.mail-labels : SidebarItem {
                             label: label.name;
+                            left-padding: 58px;
                             label-id: label.id;
                             editable-color: label.color;
                             scope: "Label:" + label.id;
@@ -590,6 +598,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             delete-label(id, name) => { root.request-delete-label(id, name); }
                         }
                     }
+                }
                 }
 
                 WorkspaceMiniHeading {
@@ -638,6 +647,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         for mailbox in root.mailboxes : SidebarItem {
                             visible: !mailbox.is_account && mailbox.context == account.context;
                             label: mailbox.label;
+                            label-has-emoji: mailbox.label_has_emoji;
                             count: mailbox.count;
                             scope: mailbox.scope;
                             account-id: mailbox.account_id;
