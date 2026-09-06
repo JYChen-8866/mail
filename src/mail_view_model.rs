@@ -464,6 +464,30 @@ fn project_label_rows(
         .collect()
 }
 
+/// Label rows for a message's own chip list: unlike [`make_label_rows`]
+/// (the "apply label" picker, which needs the whole catalog with an
+/// `applied` flag per entry for its checkboxes), a chip list only ever
+/// shows labels actually on the message, so the catalog is filtered down
+/// *before* building rows rather than after.
+fn applied_label_rows(
+    labels: &[flectar_mail_core::models::Label],
+    applied: &[i64],
+) -> Vec<MailLabelRow> {
+    labels
+        .iter()
+        .filter(|label| applied.contains(&label.id))
+        .filter_map(|label| {
+            Some(MailLabelRow {
+                id: i32::try_from(label.id).ok()?,
+                name: label.name.clone().into(),
+                color: label_color(&label.color),
+                applied: true,
+                is_auto: label.is_auto,
+            })
+        })
+        .collect()
+}
+
 fn label_color(value: &str) -> slint::Color {
     value
         .strip_prefix('#')
@@ -644,11 +668,7 @@ pub(super) fn make_rows(
                 starred: email.starred,
                 has_attachments: email.has_attachments,
                 label_summary: label_summary(&email.labels, labels).into(),
-                labels: ModelRc::new(VecModel::from(project_label_rows(
-                    labels,
-                    &email.labels,
-                    "",
-                ))),
+                labels: ModelRc::new(VecModel::from(applied_label_rows(labels, &email.labels))),
                 selected: Some(email.id) == selected_id,
             }
         })
@@ -1148,14 +1168,26 @@ mod tests {
     fn mail_rows_keep_colored_labels_for_list_chips() {
         let mut email = message(12);
         email.labels = vec![4];
-        let labels = vec![flectar_mail_core::models::Label {
-            id: 4,
-            name: "Follow Up".into(),
-            color: "#7c3aed".into(),
-            keyword: "Follow_Up".into(),
-            position: 0,
-            is_auto: false,
-        }];
+        let labels = vec![
+            flectar_mail_core::models::Label {
+                id: 4,
+                name: "Follow Up".into(),
+                color: "#7c3aed".into(),
+                keyword: "Follow_Up".into(),
+                position: 0,
+                is_auto: false,
+            },
+            // Not applied to `email` — the row's chip list must exclude this,
+            // regressing the bug where every row showed the whole catalog.
+            flectar_mail_core::models::Label {
+                id: 5,
+                name: "Marketing".into(),
+                color: "#f97316".into(),
+                keyword: "Marketing".into(),
+                position: 1,
+                is_auto: true,
+            },
+        ];
 
         let rows = make_rows(&[email], None, &HashMap::new(), &labels);
         assert_eq!(rows[0].labels.row_count(), 1);
