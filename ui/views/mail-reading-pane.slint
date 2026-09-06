@@ -10,6 +10,7 @@ import { LayoutMetrics } from "../design-system.slint";
 
 component MailLabelChip inherits Rectangle {
     in property <string> name;
+    in property <bool> name-has-emoji: false;
     in property <color> label-color;
     in property <color> text-color;
     in property <color> chip-border-color;
@@ -41,6 +42,7 @@ component MailLabelChip inherits Rectangle {
         color: root.text-color;
         font-size: TypeScale.caption;
         font-weight: 600;
+        font-family: root.name-has-emoji ? "Noto Emoji" : "";
         overflow: elide;
         vertical-alignment: center;
     }
@@ -397,6 +399,7 @@ export component MailReadingPane inherits Rectangle {
                                                             color: root.heading;
                                                             font-size: TypeScale.body;
                                                             font-weight: label.applied ? 600 : 500;
+                                                            font-family: label.name_has_emoji ? "Noto Emoji" : "";
                                                             overflow: elide;
                                                             vertical-alignment: center;
                                                         }
@@ -562,6 +565,7 @@ export component MailReadingPane inherits Rectangle {
                             for label in root.mail_labels : MailLabelChip {
                                 visible: label.applied;
                                 name: label.name;
+                                name-has-emoji: label.name_has_emoji;
                                 label-color: label.color;
                                 text-color: root.heading;
                                 chip-border-color: root.border-subtle;

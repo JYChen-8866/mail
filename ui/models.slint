@@ -1,5 +1,7 @@
 // Shared UI-facing data types live outside app.slint so feature components can
 // consume the same models without depending on the application window.
+import "../resources/fonts/noto-emoji/NotoEmoji[wght].ttf";
+
 export struct LocalizedMessage {
     key: string,
     argument: string,
@@ -44,6 +46,7 @@ export struct MailboxRow {
 export struct MailLabelRow {
     id: int,
     name: string,
+    name_has_emoji: bool,
     color: color,
     applied: bool,
     is_auto: bool,

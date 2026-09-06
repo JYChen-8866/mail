@@ -474,6 +474,7 @@ fn project_label_rows(
             Some(MailLabelRow {
                 id: i32::try_from(label.id).ok()?,
                 name: label.name.clone().into(),
+                name_has_emoji: contains_emoji(&label.name),
                 color: label_color(&label.color),
                 applied: applied.contains(&label.id),
                 is_auto: label.is_auto,
@@ -498,6 +499,7 @@ fn applied_label_rows(
             Some(MailLabelRow {
                 id: i32::try_from(label.id).ok()?,
                 name: label.name.clone().into(),
+                name_has_emoji: contains_emoji(&label.name),
                 color: label_color(&label.color),
                 applied: true,
                 is_auto: label.is_auto,
@@ -1024,10 +1026,10 @@ pub(super) fn schedule_profile_avatar_fetches(
     }
 }
 
-fn label_has_emoji(label: &str) -> bool {
+fn contains_emoji(text: &str) -> bool {
     use unicode_properties::UnicodeEmoji as _;
 
-    label
+    text
         .chars()
         .any(|character| character.is_emoji_char() && !character.is_ascii())
 }
@@ -1076,7 +1078,7 @@ pub(super) fn make_mailbox_rows(
                 has_children: mailbox.has_children,
                 expanded: !collapsed_folder_ids.contains(&mailbox.folder_id),
                 is_standard: mailbox.is_standard,
-                label_has_emoji: label_has_emoji(&mailbox.label),
+                label_has_emoji: contains_emoji(&mailbox.label),
                 label: mailbox.label.clone().into(),
                 scope: mailbox.scope.clone().into(),
                 context: mailbox.context.clone().into(),
@@ -1371,11 +1373,21 @@ mod tests {
     }
 
     #[test]
-    fn sidebar_folder_detects_emoji_labels() {
-        assert!(label_has_emoji("🚗🚗"));
-        assert!(label_has_emoji("Cars 🚗"));
-        assert!(!label_has_emoji("Cars"));
-        assert!(!label_has_emoji("Folder 1"));
+    fn mail_ui_detects_emoji_names() {
+        assert!(contains_emoji("🚗🚗"));
+        assert!(contains_emoji("Cars 🚗"));
+        assert!(!contains_emoji("Cars"));
+        assert!(!contains_emoji("Folder 1"));
+
+        let labels = [flectar_mail_core::models::Label {
+            id: 1,
+            name: "🚗🚗".into(),
+            color: "#4a86e8".into(),
+            keyword: "Cars".into(),
+            position: 0,
+            is_auto: false,
+        }];
+        assert!(project_label_rows(&labels, &[1], "")[0].name_has_emoji);
     }
 
     #[test]
