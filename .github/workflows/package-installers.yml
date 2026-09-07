@@ -141,12 +141,14 @@ jobs:
           "Staged tree:"
           Get-ChildItem -Recurse -File $stage | ForEach-Object { $_.FullName }
 
-          # Convert to forward slashes so they survive makensis command-line defines.
-          $stageFwd = $stage.Replace('\', '/')
-          $iconFwd  = (Resolve-Path (Join-Path $repo 'platform\windows\flectar-mail.ico')).Path.Replace('\', '/')
-          $outdirFwd= $stage.Replace('\', '/')   # EXE is written into the staging dir
+          # Use native backslash paths: NSIS's File command does not resolve
+          # forward-slash absolute paths on Windows, which was causing the
+          # "no files found" error even though the staged files existed.
+          $stageNative = $stage
+          $iconNative  = (Resolve-Path (Join-Path $repo 'platform\windows\flectar-mail.ico')).Path
+          $outdirNative= $stage   # EXE is written into the staging dir
 
-          $out = & "$env:NSIS_PATH" "-DVERSION=$version" "-DSTAGE=$stageFwd" "-DICON=$iconFwd" "-DOUTDIR=$outdirFwd" "platform\windows\flectar-mail.nsi"
+          $out = & "$env:NSIS_PATH" "-DVERSION=$version" "-DSTAGE=$stageNative" "-DICON=$iconNative" "-DOUTDIR=$outdirNative" "platform\windows\flectar-mail.nsi"
           if ($LASTEXITCODE -ne 0) {
             Write-Error "makensis failed: $out"
           }

@@ -1,11 +1,15 @@
 ; Flectar Mail NSIS installer
 ;
-; Build (from the repository root, within the GitHub Actions Windows job):
+; Build from the repository root, within the GitHub Actions Windows job:
 ;   makensis -DVERSION=<semver> \
-;            -DSTAGE=<absolute staged installer dir, forward slashes> \
-;            -DICON=<absolute path to platform/windows/flectar-mail.ico> \
-;            -DOUTDIR=<absolute output dir, forward slashes> \
+;            "-DSTAGE=C:\path\to\target\installer" \
+;            "-DICON=C:\path\to\platform\windows\flectar-mail.ico" \
+;            "-DOUTDIR=C:\path\to\target\installer" \
 ;            platform\windows\flectar-mail.nsi
+;
+; NOTE: NSIS's File command does not resolve forward-slash absolute paths on
+; Windows, so all path defines must use backslashes. Also keep the ICON name
+; simple (a single file in STAGE is mirrored by the build step).
 ;
 ; The STAGE directory must already contain the exact files that belong inside
 ; Program Files (the .exe, README, LICENSE, THIRD_PARTY_NOTICES.md, plus the
@@ -30,7 +34,7 @@ Unicode true
   !error "STAGE directory must be defined (absolute path to the staged install tree)"
 !endif
 !ifndef ICON
-  !define ICON "${STAGE}/flectar-mail.ico"
+  !define ICON "${STAGE}\flectar-mail.ico"
 !endif
 !ifndef OUTDIR
   !define OUTDIR "."
@@ -38,7 +42,7 @@ Unicode true
 
 Name "${APP_NAME} ${VERSION}"
 ; Keep the output file name free of spaces so CI artifacts are easy to handle.
-OutFile "${OUTDIR}/flectar-mail-${VERSION}-setup-x64.exe"
+OutFile "${OUTDIR}\flectar-mail-${VERSION}-setup-x64.exe"
 
 Icon "${ICON}"
 UninstallIcon "${ICON}"
@@ -76,19 +80,19 @@ Section "Flectar Mail" SEC_MAIN
   ; explicitly so placement is deterministic across NSIS versions (the File /r
   ; switch nests the top-level directory differently in some releases).
   SetOutPath "$INSTDIR"
-  File "${STAGE}/flectar-mail.exe" "${STAGE}/README.md" "${STAGE}/LICENSE" "${STAGE}/THIRD_PARTY_NOTICES.md"
+  File "${STAGE}\flectar-mail.exe" "${STAGE}\README.md" "${STAGE}\LICENSE" "${STAGE}\THIRD_PARTY_NOTICES.md"
 
   SetOutPath "$INSTDIR\LICENSES"
-  File "${STAGE}/LICENSES/GPL-3.0-only.txt"
-  File "${STAGE}/LICENSES/Apache-2.0.txt"
+  File "${STAGE}\LICENSES\GPL-3.0-only.txt"
+  File "${STAGE}\LICENSES\Apache-2.0.txt"
 
   SetOutPath "$INSTDIR\Licenses\Google Sans Flex"
-  File "${STAGE}/Licenses/Google Sans Flex/OFL.txt"
-  File "${STAGE}/Licenses/Google Sans Flex/README.md"
+  File "${STAGE}\Licenses\Google Sans Flex\OFL.txt"
+  File "${STAGE}\Licenses\Google Sans Flex\README.md"
 
   SetOutPath "$INSTDIR\Licenses\Noto Emoji"
-  File "${STAGE}/Licenses/Noto Emoji/OFL.txt"
-  File "${STAGE}/Licenses/Noto Emoji/README.md"
+  File "${STAGE}\Licenses\Noto Emoji\OFL.txt"
+  File "${STAGE}\Licenses\Noto Emoji\README.md"
 
   ; Start Menu + Desktop shortcuts.
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
