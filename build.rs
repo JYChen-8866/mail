@@ -1,10 +1,10 @@
 fn main() {
     if std::env::var_os("CARGO_CFG_TARGET_OS").as_deref() == Some(std::ffi::OsStr::new("windows")) {
         winresource::WindowsResource::new()
-            .set_icon("resources/app-icon/flectar-mail.ico")
+            .set_icon("platform/windows/flectar-mail.ico")
             .compile()
             .expect("failed to embed the Windows application icon");
-        println!("cargo:rerun-if-changed=resources/app-icon/flectar-mail.ico");
+        println!("cargo:rerun-if-changed=platform/windows/flectar-mail.ico");
     }
 
     // Application controls are painted from primitives in app.slint. Fluent is
