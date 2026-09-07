@@ -104,32 +104,54 @@ jobs:
       - name: Stage installer files and build EXE
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          $repo = (Get-Location).Path
+
           # Read the package version (the only line-start "version = " in Cargo.toml).
-          $version = [regex]::Match((Get-Content Cargo.toml -Raw), '(?m)^version\s*=\s*"([^"]+)"').Groups[1].Value
+          $version = [regex]::Match((Get-Content (Join-Path $repo 'Cargo.toml') -Raw), '(?m)^version\s*=\s*"([^"]+)"').Groups[1].Value
 
-          $stage = "$PWD/target/installer"
+          $exe = Join-Path $repo 'target\release\flectar-mail.exe'
+          if (-not (Test-Path -LiteralPath $exe)) {
+            Write-Error "Built binary not found at $exe"
+            exit 1
+          }
+
+          $stage = Join-Path $repo 'target\installer'
           New-Item -ItemType Directory -Force $stage | Out-Null
-          New-Item -ItemType Directory -Force "$stage/LICENSES" | Out-Null
-          New-Item -ItemType Directory -Force "$stage/Licenses/Google Sans Flex" | Out-Null
-          New-Item -ItemType Directory -Force "$stage/Licenses/Noto Emoji" | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $stage 'LICENSES') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $stage 'Licenses\Google Sans Flex') | Out-Null
+          New-Item -ItemType Directory -Force (Join-Path $stage 'Licenses\Noto Emoji') | Out-Null
 
-          Copy-Item target/release/flectar-mail.exe $stage/
-          Copy-Item README.md, LICENSE, THIRD_PARTY_NOTICES.md $stage/
-          Copy-Item LICENSES/* "$stage/LICENSES/"
-          Copy-Item resources/fonts/google-sans-flex/OFL.txt, resources/fonts/google-sans-flex/README.md "$stage/Licenses/Google Sans Flex/"
-          Copy-Item resources/fonts/noto-emoji/OFL.txt, resources/fonts/noto-emoji/README.md "$stage/Licenses/Noto Emoji/"
+          # Copy each file with an explicit destination filename so a failure is
+          # loud and atomic (a directory-with-trailing-slash destination can fail
+          # silently and leave makensis with nothing to install).
+          Copy-Item -LiteralPath $exe -Destination (Join-Path $stage 'flectar-mail.exe')
+          Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination (Join-Path $stage 'README.md')
+          Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $stage 'LICENSE')
+          Copy-Item -LiteralPath (Join-Path $repo 'THIRD_PARTY_NOTICES.md') -Destination (Join-Path $stage 'THIRD_PARTY_NOTICES.md')
+          Get-ChildItem -File (Join-Path $repo 'LICENSES') | ForEach-Object {
+            Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $stage 'LICENSES')
+          }
+          Copy-Item -LiteralPath (Join-Path $repo 'resources\fonts\google-sans-flex\OFL.txt') -Destination (Join-Path $stage 'Licenses\Google Sans Flex\OFL.txt')
+          Copy-Item -LiteralPath (Join-Path $repo 'resources\fonts\google-sans-flex\README.md') -Destination (Join-Path $stage 'Licenses\Google Sans Flex\README.md')
+          Copy-Item -LiteralPath (Join-Path $repo 'resources\fonts\noto-emoji\OFL.txt') -Destination (Join-Path $stage 'Licenses\Noto Emoji\OFL.txt')
+          Copy-Item -LiteralPath (Join-Path $repo 'resources\fonts\noto-emoji\README.md') -Destination (Join-Path $stage 'Licenses\Noto Emoji\README.md')
+
+          # Diagnostic: show the exact staged tree before invoking NSIS.
+          "Staged tree:"
+          Get-ChildItem -Recurse -File $stage | ForEach-Object { $_.FullName }
 
           # Convert to forward slashes so they survive makensis command-line defines.
           $stageFwd = $stage.Replace('\', '/')
-          $iconFwd  = (Resolve-Path "platform/windows/flectar-mail.ico").Path.Replace('\', '/')
+          $iconFwd  = (Resolve-Path (Join-Path $repo 'platform\windows\flectar-mail.ico')).Path.Replace('\', '/')
           $outdirFwd= $stage.Replace('\', '/')   # EXE is written into the staging dir
 
-          $out = & "$env:NSIS_PATH" "-DVERSION=$version" "-DSTAGE=$stageFwd" "-DICON=$iconFwd" "-DOUTDIR=$outdirFwd" "platform/windows/flectar-mail.nsi"
+          $out = & "$env:NSIS_PATH" "-DVERSION=$version" "-DSTAGE=$stageFwd" "-DICON=$iconFwd" "-DOUTDIR=$outdirFwd" "platform\windows\flectar-mail.nsi"
           if ($LASTEXITCODE -ne 0) {
             Write-Error "makensis failed: $out"
           }
 
-          Get-ChildItem "$stage/*.exe" | Select-Object -ExpandProperty FullName
+          Get-ChildItem "$stage\*.exe" | Select-Object -ExpandProperty FullName
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
